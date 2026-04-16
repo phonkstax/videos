@@ -1,10 +1,10 @@
-name: Fetch YTM Unlisted
+name: Get YTM Playlist Items
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: # Allows you to run it manually
 
 jobs:
-  get-items:
+  fetch:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
@@ -12,9 +12,13 @@ jobs:
 
       - name: Install yt-dlp
         run: |
-          # Downloads the latest yt-dlp binary directly
           sudo curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp
           sudo chmod a+rx /usr/local/bin/yt-dlp
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
       - name: Run Script
         run: python get_playlist.py
