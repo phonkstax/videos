@@ -3,48 +3,71 @@ import requests
 import json
 import sys
 
-def get_access_token():
-    """Refreshes the OAuth token using your credentials."""
+# Notion Database ID from your screenshot
+NOTION_DB_ID = "31fb4e9c9ef68068b8edc379332d974f" 
+
+def get_yt_token():
     url = "https://oauth2.googleapis.com/token"
-    try:
-        oauth_data = json.loads(os.environ['YTM_OAUTH_JSON'])
-        payload = {
-            "client_id": os.environ['YTM_CLIENT_ID'],
-            "client_secret": os.environ['YTM_CLIENT_SECRET'],
-            "refresh_token": oauth_data['refresh_token'],
-            "grant_type": "refresh_token"
-        }
-        r = requests.post(url, data=payload)
-        r.raise_for_status()
-        return r.json().get('access_token')
-    except Exception as e:
-        print(f"Auth Error: {e}")
-        return None
-
-def delete_playlist_item(item_id):
-    """Deletes the specific item from the playlist."""
-    token = get_access_token()
-    if not token:
-        return
-
-    # Official Google API endpoint for deleting playlist items
-    url = "https://www.googleapis.com/youtube/v3/playlistItems"
-    params = {"id": item_id}
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Accept": "application/json"
+    oauth_data = json.loads(os.environ['YTM_OAUTH_JSON'])
+    payload = {
+        "client_id": os.environ['YTM_CLIENT_ID'],
+        "client_secret": os.environ['YTM_CLIENT_SECRET'],
+        "refresh_token": oauth_data['refresh_token'],
+        "grant_type": "refresh_token"
     }
+    return requests.post(url, data=payload).json().get('access_token')
 
-    print(f"Attempting to delete item: {item_id}")
-    r = requests.delete(url, params=params, headers=headers)
+def get_first_item(token):
+    url = "https://www.googleapis.com/youtube/v3/playlistItems"
+    params = {
+        "part": "snippet,contentDetails",
+        "playlistId": "PL8WGYt2fhenCJnBHFBKqw8SZl-oyO03Ur",
+        "maxResults": 1
+    }
+    headers = {"Authorization": f"Bearer {token}"}
+    r = requests.get(url, params=params, headers=headers).json()
+    return r.get('items', [])[0] if r.get('items') else None
 
-    if r.status_code == 204:
-        print("Successfully removed from playlist!")
+def check_notion(video_id):
+    url = f"https://api.notion.com/v1/databases/{NOTION_DB_ID}/query"
+    headers = {
+        "Authorization": f"Bearer {os.environ['NOTION_TOKEN']}",
+        "Notion-Version": "2022-06-28",
+        "Content-Type": "application/json"
+    }
+    # Matches the 'Video ID' property in your Notion table
+    payload = {
+        "filter": {
+            "property": "Video ID",
+            "rich_text": {"equals": video_id}
+        }
+    }
+    res = requests.post(url, json=payload, headers=headers).json()
+    return len(res.get("results", [])) > 0
+
+def main():
+    yt_token = get_yt_token()
+    item = get_first_item(yt_token)
+
+    if not item:
+        print("Playlist is empty.")
+        sys.exit(0)
+
+    v_id = item['contentDetails']['videoId']
+    item_id = item['id']
+    title = item['snippet']['title']
+
+    if check_notion(v_id):
+        print(f"SKIPPING: {title} is already in Notion.")
+        with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+            f.write("exists=true\n")
     else:
-        print(f"Failed to delete. Status: {r.status_code}")
-        print(f"Response: {r.text}")
+        print(f"PROCEEDING: {title} is new!")
+        with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+            f.write("exists=false\n")
+            f.write(f"video_id={v_id}\n")
+            f.write(f"item_id={item_id}\n")
+            f.write(f"title={title}\n")
 
 if __name__ == "__main__":
-    # Get ID from command line or use your provided ID as default
-    target_id = sys.argv[1] if len(sys.argv) > 1 else "UEw4V0dZdDJmaGVuQ0puQkhGQktxdzhTWmwtb3lPMDNVci5ENUI5OTFCQkYxNDUxQjQ3"
-    delete_playlist_item(target_id)
+    main()
