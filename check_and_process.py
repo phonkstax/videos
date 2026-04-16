@@ -42,16 +42,17 @@ def check_notion_entry(video_id):
     return len(res.get("results", [])) > 0
 
 def download_media(video_id, token):
-    print(f"Downloading media for {video_id} using Android client spoofing...")
+    print(f"Downloading media for {video_id} using iOS client spoofing...")
     os.makedirs(WORKDIR, exist_ok=True)
     
     ydl_opts = {
         'format': 'bestaudio/best',
         'outtmpl': f'{WORKDIR}/audio.%(ext)s',
         'writethumbnail': True,
+        # iOS client is currently the most stable for bypassing 400 errors in CI/CD
         'extractor_args': {
             'youtube': {
-                'player_client': ['android', 'web'],
+                'player_client': ['ios'],
                 'skip': ['dash', 'hls']
             }
         },
@@ -65,7 +66,7 @@ def download_media(video_id, token):
         }],
         'http_headers': {
             'Authorization': f'Bearer {token}',
-            'User-Agent': 'Mozilla/5.0 (Android 14; Mobile; rv:124.0) Gecko/124.0 Firefox/124.0'
+            'User-Agent': 'com.google.ios.youtube/19.12.3 (iPhone16,2; iOS 17_4_1; Scale/3.00)'
         },
         'nocheckcertificate': True,
         'quiet': False
