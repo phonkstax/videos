@@ -1,0 +1,29 @@
+name: Test Cobalt Bypass
+
+on:
+  workflow_dispatch: # Allows you to run it manually from the Actions tab
+
+jobs:
+  test-bridge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Dependencies
+        run: pip install requests
+
+      - name: Run Cobalt Download Test
+        run: python test_cobalt.py
+
+      - name: Upload Test Result
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cobalt-test-audio
+          path: output_audio.mp3
