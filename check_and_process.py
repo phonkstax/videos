@@ -44,7 +44,6 @@ def check_notion_entry(video_id):
         "Content-Type": "application/json"
     }
     
-    # Precise filter using the UUID for the Relation
     payload = {
         "filter": {
             "and": [
@@ -83,17 +82,25 @@ def main():
         print("Playlist is empty.")
         sys.exit(0)
 
+    # IDs for output and debugging
     v_id = item['contentDetails']['videoId']
-    item_id = item['id']
+    item_id = item['id']  # This is the Playlist Item ID starting with UEw...
     title = item['snippet']['title']
 
+    # Show the IDs in the GitHub log as requested
+    print(f"--- Playlist Item Found ---")
+    print(f"Title: {title}")
+    print(f"Video ID: {v_id}")
+    print(f"Playlist Item ID: {item_id}")
+    print(f"---------------------------")
+
     if check_notion_entry(v_id):
-        print(f"MATCH FOUND: '{title}' ({v_id}) already exists for phonkstax. Skipping.")
+        print(f"MATCH FOUND: '{title}' already exists for phonkstax. Skipping.")
         if 'GITHUB_OUTPUT' in os.environ:
             with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
                 f.write("exists=true\n")
     else:
-        print(f"PROCEEDING: '{title}' ({v_id}) is a new Reel for phonkstax.")
+        print(f"PROCEEDING: '{title}' is a new Reel for phonkstax.")
         if 'GITHUB_OUTPUT' in os.environ:
             with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
                 f.write("exists=false\n")
