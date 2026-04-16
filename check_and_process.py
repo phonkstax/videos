@@ -3,7 +3,7 @@ import requests
 import json
 import sys
 
-# Notion Database ID from your screenshot
+# Constants from your Notion setup
 NOTION_DB_ID = "31fb4e9c9ef68068b8edc379332d974f" 
 
 def get_yt_token():
@@ -28,18 +28,31 @@ def get_first_item(token):
     r = requests.get(url, params=params, headers=headers).json()
     return r.get('items', [])[0] if r.get('items') else None
 
-def check_notion(video_id):
+def check_notion_entry(video_id):
     url = f"https://api.notion.com/v1/databases/{NOTION_DB_ID}/query"
     headers = {
         "Authorization": f"Bearer {os.environ['NOTION_TOKEN']}",
         "Notion-Version": "2022-06-28",
         "Content-Type": "application/json"
     }
-    # Matches the 'Video ID' property in your Notion table
+    
+    # Combined filter: Video ID match AND Type is Reel AND Channel is phonkstax
     payload = {
         "filter": {
-            "property": "Video ID",
-            "rich_text": {"equals": video_id}
+            "and": [
+                {
+                    "property": "Video ID",
+                    "rich_text": {"equals": video_id}
+                },
+                {
+                    "property": "Type",
+                    "select": {"equals": "Reel"}
+                },
+                {
+                    "property": "Channel",
+                    "select": {"equals": "phonkstax"}
+                }
+            ]
         }
     }
     res = requests.post(url, json=payload, headers=headers).json()
@@ -57,12 +70,12 @@ def main():
     item_id = item['id']
     title = item['snippet']['title']
 
-    if check_notion(v_id):
-        print(f"SKIPPING: {title} is already in Notion.")
+    if check_notion_entry(v_id):
+        print(f"SKIPPING: {title} already exists as a 'Reel' for 'phonkstax' in Notion.")
         with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
             f.write("exists=true\n")
     else:
-        print(f"PROCEEDING: {title} is new!")
+        print(f"PROCEEDING: {title} is a new entry for your channel.")
         with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
             f.write("exists=false\n")
             f.write(f"video_id={v_id}\n")
