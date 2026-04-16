@@ -26,6 +26,10 @@ jobs:
 
       - name: Render Reel
         if: steps.check.outputs.exists == 'false'
+        env:
+          YTM_CLIENT_ID: ${{ secrets.YTM_CLIENT_ID }}
+          YTM_CLIENT_SECRET: ${{ secrets.YTM_CLIENT_SECRET }}
+          YTM_OAUTH_JSON: ${{ secrets.YTM_OAUTH_JSON }}
         run: |
           chmod +x render_reel.sh
           ./render_reel.sh
