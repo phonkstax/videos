@@ -9,17 +9,17 @@ jobs:
   automation:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Tools
+      - name: Install System Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg jq bc
-          # Install the latest master version of yt-dlp
-          python3 -m pip install -U https://github.com/yt-dlp/yt-dlp/archive/master.tar.gz requests --break-system-packages
-     
-      - name: Check & Download
+          # We only need requests now
+          python3 -m pip install requests --break-system-packages
+
+      - name: Run Check and Download (Cobalt Bridge)
         id: check
         env:
           YTM_CLIENT_ID: ${{ secrets.YTM_CLIENT_ID }}
@@ -28,15 +28,15 @@ jobs:
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
         run: python check_and_process.py
 
-      - name: Render
+      - name: Execute FFmpeg Rendering
         if: steps.check.outputs.exists == 'false'
         run: |
           chmod +x render_reel.sh
           ./render_reel.sh
 
-      - name: Artifact
+      - name: Save Resulting Reel
         if: steps.check.outputs.exists == 'false'
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.check.outputs.title }}
+          name: ${{ steps.check.outputs.title }}-reel
           path: output.mp4
