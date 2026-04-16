@@ -1,10 +1,10 @@
+import os
 import requests
 import json
-import time
+import sys
 
-def test_cobalt_download(youtube_url):
-    # Use a common Cobalt instance API endpoint
-    # Note: Public instances can change; you may need to find a fresh one at cobalt.tools
+def download_via_cobalt(youtube_url):
+    # Public Cobalt instance
     API_URL = "https://cobalt.tools/api/json" 
     
     headers = {
@@ -14,37 +14,41 @@ def test_cobalt_download(youtube_url):
     
     payload = {
         "url": youtube_url,
-        "downloadMode": "audio", # "audio" for mp3, "v" for video
+        "downloadMode": "audio",
         "audioFormat": "mp3",
-        "audioBitrate": "192",
-        "filenameStyle": "basic"
+        "audioBitrate": "192"
     }
 
-    print(f"📡 Sending request to Cobalt for: {youtube_url}")
+    print(f"📡 Requesting Cobalt bridge for: {youtube_url}")
     
     try:
         response = requests.post(API_URL, json=payload, headers=headers)
         result = response.json()
 
-        if response.status_code == 200 and result.get("status") == "stream":
+        # Cobalt returns 'stream' for direct files or 'redirect' for some instances
+        if response.status_code == 200 and result.get("status") in ["stream", "redirect", "tunnel"]:
             download_url = result.get("url")
-            print(f"✅ Success! Download link found: {download_url}")
+            print(f"✅ Success! Bridge opened: {download_url}")
             
-            # Download the actual file
-            print("⏳ Downloading file...")
-            file_data = requests.get(download_url)
-            with open("test_audio.mp3", "wb") as f:
-                f.write(file_data.content)
-            print("🎉 Saved as 'test_audio.mp3'")
+            print("⏳ Downloading MP3 to workspace...")
+            file_data = requests.get(download_url, stream=True)
+            with open("output_audio.mp3", "wb") as f:
+                for chunk in file_data.iter_content(chunk_size=8192):
+                    f.write(chunk)
+            print("🎉 File saved: output_audio.mp3")
             return True
         else:
-            print(f"❌ Cobalt Error: {result.get('text', 'Unknown error')}")
+            print(f"❌ Cobalt Error: {result.get('text', 'Unknown response format')}")
+            print(f"Full Response: {json.dumps(result, indent=2)}")
             return False
 
     except Exception as e:
-        print(f"💥 Request failed: {e}")
+        print(f"💥 Connection failed: {e}")
         return False
 
 if __name__ == "__main__":
-    # Test with a known phonk track
-    test_cobalt_download("https://www.youtube.com/watch?v=tdocUW4aKnY")
+    # Testing with the X-BREAK track that was failing
+    test_url = "https://www.youtube.com/watch?v=tdocUW4aKnY"
+    success = download_via_cobalt(test_url)
+    if not success:
+        sys.exit(1)
