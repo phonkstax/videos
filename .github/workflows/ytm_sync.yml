@@ -1,40 +1,25 @@
-name: YouTube Music Sync
+name: YouTube Music JS Sync
 
 on:
-  workflow_dispatch: # Allows you to run it manually from the Actions tab
- 
-jobs:
-  ytm-playlist-fetch:
-    runs-on: ubuntu-latest
+  workflow_dispatch:
 
+jobs:
+  ytm-js-task:
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
-          python-version: '3.11'
+          node-version: '20'
 
-      - name: Install Dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install ytmusicapi
+      - name: Install ytmusicapi
+        run: npm install ytmusicapi
 
-      - name: Apply Hotfix for YTM Library Bug
-        # This step mimics the 'nano' edit you did locally.
-        # It adds the missing 'refresh_token_expires_in' variable to the dataclass.
-        run: |
-          FILE_PATH=$(python -c "import ytmusicapi.auth.oauth.token as t; print(t.__file__)")
-          echo "Applying hotfix to: $FILE_PATH"
-          sed -i '/expires_in: int = 0/a \    refresh_token_expires_in: int = 0' "$FILE_PATH"
-          # Verify the fix worked
-          grep "refresh_token_expires_in" "$FILE_PATH"
-
-      - name: Run Playlist Script
+      - name: Run Script
         env:
-          # These must match the names you saved in GitHub Secrets
+          # Make sure these match your GitHub Secrets exactly
           YTM_OAUTH_JSON: ${{ secrets.YTM_OAUTH_JSON }}
-          YTM_CLIENT_ID: ${{ secrets.YTM_CLIENT_ID }}
-          YTM_CLIENT_SECRET: ${{ secrets.YTM_CLIENT_SECRET }}
-        run: python get_playlist.py
+        run: node get_playlist.js
