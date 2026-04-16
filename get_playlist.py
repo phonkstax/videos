@@ -1,21 +1,26 @@
 import os
 import json
-from ytmusicapi import YTMusic
+from ytmusicapi import YTMusic, OAuthCredentials
 
 def get_ytm_client():
-    # 1. Grab the JSON from GitHub Secrets
+    # 1. Retrieve everything from GitHub Secrets
     oauth_raw = os.environ.get("YTM_OAUTH_JSON")
-    if not oauth_raw:
-        raise ValueError("YTM_OAUTH_JSON secret is missing!")
+    client_id = os.environ.get("YTM_CLIENT_ID")
+    client_secret = os.environ.get("YTM_CLIENT_SECRET")
     
-    # 2. Write it to a temporary file
+    # 2. Re-create the file on the runner
     with open("oauth.json", "w") as f:
         f.write(oauth_raw)
 
+    # 3. Create the credentials object
+    auth_keys = OAuthCredentials(
+        client_id=client_id,
+        client_secret=client_secret
+    )
+
     try:
-        # 3. For Main Accounts, simple initialization is usually best.
-        # The library reads the 'oauth.json' to set the internal headers.
-        return YTMusic("oauth.json")
+        # 4. Pass BOTH the filename and the credentials object
+        return YTMusic(auth="oauth.json", oauth_credentials=auth_keys)
     except Exception as e:
         print(f"Init Error: {e}")
         return None
@@ -27,9 +32,8 @@ def main():
     # Your private playlist ID
     playlist_id = "PL8WGYt2fhenCJnBHFBKqw8SZl-oyO03Ur"
     
-    print(f"Accessing Main Account Playlist: {playlist_id}")
+    print(f"Accessing Private Playlist: {playlist_id}")
     try:
-        # We fetch without 'limit=None' first to see if a standard request works
         playlist = yt.get_playlist(playlist_id)
         print(f"--- SUCCESS! Found: {playlist['title']} ---")
         
@@ -38,8 +42,6 @@ def main():
             
     except Exception as e:
         print(f"Fetch Error: {e}")
-        # If it still fails, the token might need more permissions
-        print("Tip: Check Google Cloud Console -> APIs & Services -> Library -> YouTube Data API v3 is ENABLED.")
 
 if __name__ == "__main__":
     main()
