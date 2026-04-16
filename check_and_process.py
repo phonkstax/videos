@@ -42,13 +42,19 @@ def check_notion_entry(video_id):
     return len(res.get("results", [])) > 0
 
 def download_media(video_id, token):
-    print(f"Downloading media for {video_id}...")
+    print(f"Downloading media for {video_id} using Android client spoofing...")
     os.makedirs(WORKDIR, exist_ok=True)
     
     ydl_opts = {
         'format': 'bestaudio/best',
         'outtmpl': f'{WORKDIR}/audio.%(ext)s',
         'writethumbnail': True,
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['android', 'web'],
+                'skip': ['dash', 'hls']
+            }
+        },
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
@@ -57,7 +63,11 @@ def download_media(video_id, token):
             'key': 'FFmpegThumbnailsConvertor',
             'format': 'jpg',
         }],
-        'http_headers': {'Authorization': f'Bearer {token}'},
+        'http_headers': {
+            'Authorization': f'Bearer {token}',
+            'User-Agent': 'Mozilla/5.0 (Android 14; Mobile; rv:124.0) Gecko/124.0 Firefox/124.0'
+        },
+        'nocheckcertificate': True,
         'quiet': False
     }
 
@@ -75,17 +85,17 @@ def main():
     title = item['snippet']['title']
     item_id = item['id']
 
-    print(f"Item: {title} ({v_id})")
+    print(f"Checking Item: {title} ({v_id})")
+    print(f"Playlist Item ID: {item_id}")
 
     if check_notion_entry(v_id):
-        print("MATCH FOUND: Skipping download and render.")
+        print("MATCH FOUND: Skipping render.")
         with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
             f.write("exists=true\n")
     else:
         print("NEW ENTRY: Starting download...")
         download_media(v_id, token)
         
-        # Save info for the next step (Bash rendering)
         with open('video_data.json', 'w') as f:
             json.dump({"video_id": v_id, "title": title, "item_id": item_id}, f)
             
