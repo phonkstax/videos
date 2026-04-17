@@ -34,7 +34,7 @@ jobs:
       - name: Step 4 - Render Output
         run: |
           # Ensure your Step 4 script now points to the trimmed file!
-          python 4_output.py
+          python 4_output.sh
           
       - name: Upload Test Result
         uses: actions/upload-artifact@v4
