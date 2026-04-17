@@ -27,8 +27,8 @@ jobs:
           YTM_CLIENT_SECRET: ${{ secrets.YTM_CLIENT_SECRET }}
           YTM_OAUTH_JSON: ${{ secrets.YTM_OAUTH_JSON }}
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
-        run: python 1_Notion_check(old).py
-
+        run: python check_and_process(old).py
+        
       - name: Step 2 - Download Video
         env:
           PIKPAK_USER: ${{ secrets.PIKPAK_USER }}
