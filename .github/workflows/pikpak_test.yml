@@ -1,10 +1,10 @@
-name: PikPak Bridge Test
+name: PikPak Send Test
 
 on:
-  workflow_dispatch: # Allows you to click "Run Workflow" manually
+  workflow_dispatch:
 
 jobs:
-  test:
+  test-send:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -13,8 +13,22 @@ jobs:
       - name: Install Rclone
         run: sudo -v && curl https://rclone.org/install.sh | sudo bash
 
-      - name: Run Python Test
+      - name: Setup PikPak Remote
         env:
           PIKPAK_USER: ${{ secrets.PIKPAK_USER }}
           PIKPAK_PASS: ${{ secrets.PIKPAK_PASS }}
-        run: python pikpak_test.py
+        run: |
+          # 1. Create the remote config
+          rclone config create mypikpak pikpak user "$PIKPAK_USER" pass "$PIKPAK_PASS"
+          
+          # 2. Force a login to generate the device_id and token
+          # We run a simple 'ls' to make sure the token is fetched
+          rclone lsf mypikpak: / --max-depth 1 || echo "First login handshake..."
+
+      - name: Send URL to PikPak
+        run: |
+          # Replace the URL below with any YouTube link you want to test
+          VIDEO_URL="https://www.youtube.com/watch?v=tdocUW4aKnY"
+          
+          echo "📡 Triggering Cloud Download for: $VIDEO_URL"
+          rclone backend addurl mypikpak:/Phonkstax_Inbox "$VIDEO_URL"
