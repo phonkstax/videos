@@ -8,7 +8,7 @@ import os
 REMOTE = "mypikpak"
 FOLDER = "/Download/temp/"
 LOCAL_OUTPUT = "./output/"
-VIDEO_URL = "https://www.youtube.com/watch?v=tdocUW4aKnY"
+VIDEO_URL = "https://www.youtube.com/watch?v=7RvhZyBK9vU"
 # --------------
 
 def run_command(args):
