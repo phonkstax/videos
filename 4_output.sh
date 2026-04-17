@@ -66,19 +66,4 @@ echo "✅ Success: $FINAL_OUT"
 
 
 # Check if the secret variable is actually set
-if [ -z "$WEBHOOK_URL" ]; then
-    echo "⚠️ WEBHOOK_URL is not set. Skipping upload."
-    exit 0
-fi
 
-echo "📡 Encoding and sending to Google Drive..."
-
-# Encode video to base64
-BASE64_VIDEO=$(base64 -w 0 "$FINAL_OUT")
-
-# Send to Apps Script
-RESPONSE=$(curl -L -s -X POST "$WEBHOOK_URL" \
-    -F "filename=$FILENAME" \
-    -F "file=$BASE64_VIDEO")
-
-echo "📩 Server Response: $RESPONSE"
