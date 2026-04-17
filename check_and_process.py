@@ -41,53 +41,51 @@ def check_notion_entry(video_id):
     return len(res.get("results", [])) > 0
 
 def download_media(video_id):
-    print(f"📡 Requesting 3rd-party conversion for: {video_id}")
+    print(f"📡 Attempting Invidious Proxy for {video_id}...")
     os.makedirs(WORKDIR, exist_ok=True)
     
-    # Using a 3rd party API bridge (MP3.xyz / yt-download approach)
-    # This server acts as the middleman so YouTube doesn't see GitHub's IP.
-    API_URL = f"https://api.vevioz.com/api/button/mp3/{video_id}"
+    # List of public Invidious instances to rotate if one fails
+    instances = [
+        "https://invidious.snopyta.org",
+        "https://y.com.sb",
+        "https://invidious.sethforprivacy.com"
+    ]
     
-    try:
-        # 1. We fetch the conversion page
-        # Some 3rd party sites use a direct button API
-        print("⏳ Connecting to conversion server...")
-        
-        # 2. Downloading Thumbnail (Always safe from Google's CDN)
-        thumb_url = f"https://i3.ytimg.com/vi/{video_id}/maxresdefault.jpg"
-        thumb_res = requests.get(thumb_url, timeout=20)
-        with open(f"{WORKDIR}/audio.jpg", "wb") as f:
-            f.write(thumb_res.content)
+    for base_url in instances:
+        try:
+            print(f"🔗 Trying instance: {base_url}")
+            api_url = f"{base_url}/api/v1/videos/{video_id}"
+            data = requests.get(api_url, timeout=20).json()
             
-        # 3. Downloading Audio via a reliable public mirror
-        # We use a secondary Piped instance if the button API is slow
-        # because it provides the most direct 'google video' link.
-        MIRROR_API = f"https://pipedapi.kavin.rocks/streams/{video_id}"
-        data = requests.get(MIRROR_API, timeout=30).json()
-        
-        audio_url = None
-        for stream in data.get("audioStreams", []):
-            if stream.get("format") == "M4A" or stream.get("codec") == "opus":
-                audio_url = stream.get("url")
-                break
-        
-        if not audio_url:
-            # Final fallback to a direct download service
-            audio_url = f"https://api.vvevioz.com/download/mp3/{video_id}"
-
-        print("🚀 Bypassing IP block. Streaming audio...")
-        audio_res = requests.get(audio_url, stream=True, timeout=60)
-        
-        with open(f"{WORKDIR}/audio.mp3", "wb") as f:
-            for chunk in audio_res.iter_content(chunk_size=8192):
-                f.write(chunk)
-
-        print("🎉 Successfully pulled media from 3rd-party mirror!")
-        return True
-
-    except Exception as e:
-        print(f"💥 3rd-party bypass failed: {e}")
-        sys.exit(1)
+            # Find the best audio-only stream
+            # Invidious formats are often more stable for direct download
+            formats = data.get("adaptiveFormats", [])
+            audio_url = None
+            for f in formats:
+                if "audio/" in f.get("type", ""):
+                    audio_url = f.get("url")
+                    break
+            
+            if audio_url:
+                print("⏳ Downloading Audio...")
+                res = requests.get(audio_url, stream=True, timeout=60)
+                with open(f"{WORKDIR}/audio.mp3", "wb") as f:
+                    for chunk in res.iter_content(chunk_size=8192):
+                        f.write(chunk)
+                
+                # Thumbnail
+                thumb_url = f"https://i3.ytimg.com/vi/{video_id}/maxresdefault.jpg"
+                with open(f"{WORKDIR}/audio.jpg", "wb") as f:
+                    f.write(requests.get(thumb_url).content)
+                
+                print("🎉 Success via Invidious!")
+                return True
+        except Exception as e:
+            print(f"⚠️ Instance {base_url} failed. Trying next...")
+            continue
+            
+    print("❌ All mirrors failed. YouTube is blocking the runner IP.")
+    sys.exit(1)
 
 
 def main():
