@@ -32,7 +32,12 @@ jobs:
           YTM_CLIENT_SECRET: ${{ secrets.YTM_CLIENT_SECRET }}
           YTM_OAUTH_JSON: ${{ secrets.YTM_OAUTH_JSON }}
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
-        run: python 1_Notion_check.py
+        run: |
+          # DEBUG: See what the runner actually sees
+          cat 1_Notion_check.py
+          
+          # RUN:
+          python 1_Notion_check.py
 
       - name: 📝 Commit and Push Metadata (Early Save)
         run: |
