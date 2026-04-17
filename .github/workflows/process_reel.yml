@@ -29,14 +29,19 @@ jobs:
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
         run: python 1_Notion_check.py
 
-      - name: Step 2 - Download
+      - name: Step 2 - Download Video
+        env:
+          PIKPAK_USER: ${{ secrets.PIKPAK_USER }}
+          PIKPAK_PASS: ${{ secrets.PIKPAK_PASS }}
         run: |
-          # 1. CLEAN FIRST (Before new download)
-          rm -rf ./assets/download/*
-          rm -rf ./assets/audio/*
-          rm -rf ./assets/image/*
+          # 1. Create config
+          rclone config create mypikpak pikpak user "$PIKPAK_USER" pass "$PIKPAK_PASS"
           
-          # 2. DOWNLOAD
+          # 2. IMPORTANT: Force login/handshake before using 'backend'
+          # This command creates the token file rclone needs.
+          rclone lsf mypikpak: --max-depth 1
+          
+          # 3. Run the script
           python 2_download_video.py
 
       - name: Step 3 - Split
