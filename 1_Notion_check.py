@@ -33,7 +33,7 @@ def clean_title(artist, track):
     artist = re.sub(r'\s*-\s*Topic\s*$', '', artist, flags=re.IGNORECASE).strip()
     
     # 3. Logic check: If artist is "Various Artists" or generic, just use the track name
-    if artist.lower() in ["various artists", "unknown artist", "youtube"]:
+    if artist.lower() in ["various artists", "unknown artist", "youtube","Release - Topic"]:
         return track
     
     # 4. If the track title already contains the artist name, don't double it
