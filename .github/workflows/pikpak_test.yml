@@ -1,4 +1,4 @@
-name: PikPak Send Test
+name: PikPak Send to Folder Test
 
 on:
   workflow_dispatch:
@@ -21,14 +21,25 @@ jobs:
           # 1. Create the remote config
           rclone config create mypikpak pikpak user "$PIKPAK_USER" pass "$PIKPAK_PASS"
           
-          # 2. Force a login to generate the device_id and token
-          # We run a simple 'ls' to make sure the token is fetched
-          rclone lsf mypikpak: / --max-depth 1 || echo "First login handshake..."
+          # 2. Handshake (List root to verify connection)
+          rclone lsf mypikpak: --max-depth 1
 
-      - name: Send URL to PikPak
+      - name: Create Folder Structure
         run: |
-          # Replace the URL below with any YouTube link you want to test
+          # This creates the full path if it doesn't exist
+          rclone mkdir mypikpak:/R97group/phonkstax/reels/
+
+      - name: Send URL to Folder
+        run: |
           VIDEO_URL="https://www.youtube.com/watch?v=tdocUW4aKnY"
           
-          echo "📡 Triggering Cloud Download for: $VIDEO_URL"
-          rclone backend addurl mypikpak:/Phonkstax_Inbox "$VIDEO_URL"
+          echo "📡 Triggering Cloud Download into /R97group/phonkstax/reels/"
+          # Note the trailing slash after reels/ to ensure it's treated as a directory
+          rclone backend addurl mypikpak:/R97group/phonkstax/reels/ "$VIDEO_URL"
+
+      - name: Verify Transfer
+        run: |
+          echo "⏳ Waiting 10 seconds for transfer list to update..."
+          sleep 10
+          echo "📂 Current files in folder:"
+          rclone lsf mypikpak:/R97group/phonkstax/reels/
