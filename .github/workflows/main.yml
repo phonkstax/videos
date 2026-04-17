@@ -22,12 +22,12 @@ jobs:
           sudo apt-get install -y ffmpeg jq bc
 
       - name: 📝 Step 1 - Fetch Metadata from Notion
-        
+        run: 1_Notion_check.py
         # Ensure NOTION_TOKEN and NOTION_DATABASE_ID are in Secrets
         env:
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
           NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID }}
-        run: 1_Notion_check.py
+        
 
       - name: ⚙️ Setup Rclone
         run: |
