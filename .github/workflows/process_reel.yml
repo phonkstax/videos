@@ -1,0 +1,67 @@
+name: Phonkstax Media Pipeline
+
+on:
+  workflow_dispatch: # Manual trigger for testing
+
+# Grant write permissions for committing assets back to the repo
+permissions:
+  contents: write
+
+jobs:
+  run-pipeline:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Tools (FFmpeg & Rclone)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          curl https://rclone.org/install.sh | sudo bash
+
+      - name: Step 1 - Notion & Playlist Check
+        env:
+          YTM_CLIENT_ID: ${{ secrets.YTM_CLIENT_ID }}
+          YTM_CLIENT_SECRET: ${{ secrets.YTM_CLIENT_SECRET }}
+          YTM_OAUTH_JSON: ${{ secrets.YTM_OAUTH_JSON }}
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+        run: python 1_Notion_check.py
+
+      - name: Step 2 - Download Video (PikPak Bridge)
+        env:
+          PIKPAK_USER: ${{ secrets.PIKPAK_USER }}
+          PIKPAK_PASS: ${{ secrets.PIKPAK_PASS }}
+        run: |
+          # Only run if metadata.json was created in Step 1
+          if [ -f metadata.json ]; then
+            rclone config create mypikpak pikpak user "$PIKPAK_USER" pass "$PIKPAK_PASS"
+            python 2_download_video.py
+          else
+            echo "⏭️ Skipping Step 2: No new video to process."
+          fi
+
+      - name: Step 3 - Audio & Image Splitter (FFmpeg)
+        run: |
+          if [ -d ./assets/download ]; then
+            bash 3_audio_image_splitter.sh
+          else
+            echo "⏭️ Skipping Step 3: No video downloaded."
+          fi
+
+      - name: Step 4 - Commit Assets to Repo
+        run: |
+          if [ -f metadata.json ]; then
+            git config --global user.name "Phonkstax-Bot"
+            git config --global user.email "bot@phonkstax.com"
+            git add assets/ metadata.json
+            
+            # Use jq to get the title for the commit message if available
+            TITLE=$(cat metadata.json | jq -r '.title' || echo "New Reel")
+            
+            git commit -m "📦 Assets Extracted: $TITLE"
+            git push
+          else
+            echo "✅ Nothing to commit."
+          fi
