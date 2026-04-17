@@ -84,8 +84,23 @@ jobs:
       - name: 🚀 Step 5 - Webhook & Force Push Video
         env:
           WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
-        run: |
-          bash 5_webhook.sh
+        run: bash 5_webhook.sh
+
+      - name: 📝 Step 6 - Update Notion Database
+        if: success()
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          NOTION_DB_ID: ${{ secrets.NOTION_DB_ID }}
+          NOTION_PAGE_ID: ${{ secrets.NOTION_PAGE_ID }}
+        run: python 6_notion_update.py
+
+      - name: 🧹 Step 7 - Delete from YouTube Playlist
+        if: success()
+        env:
+          YTM_CLIENT_ID: ${{ secrets.YTM_CLIENT_ID }}
+          YTM_CLIENT_SECRET: ${{ secrets.YTM_CLIENT_SECRET }}
+          YTM_OAUTH_JSON: ${{ secrets.YTM_OAUTH_JSON }}
+        run: python 7_cleanup_playlist.py
 
       - name: 📦 Archive Final Video (GitHub Artifact)
         if: always()
