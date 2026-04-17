@@ -1,10 +1,10 @@
-name: PikPak Send to Folder Test
+name: PikPak Round-Trip Test
 
 on:
   workflow_dispatch:
 
 jobs:
-  test-send:
+  full-test:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -13,33 +13,16 @@ jobs:
       - name: Install Rclone
         run: sudo -v && curl https://rclone.org/install.sh | sudo bash
 
-      - name: Setup PikPak Remote
+      - name: Configure PikPak
         env:
           PIKPAK_USER: ${{ secrets.PIKPAK_USER }}
           PIKPAK_PASS: ${{ secrets.PIKPAK_PASS }}
         run: |
-          # 1. Create the remote config
           rclone config create mypikpak pikpak user "$PIKPAK_USER" pass "$PIKPAK_PASS"
-          
-          # 2. Handshake (List root to verify connection)
           rclone lsf mypikpak: --max-depth 1
 
-      - name: Create Folder Structure
-        run: |
-          # This creates the full path if it doesn't exist
-          rclone mkdir mypikpak:/R97group/phonkstax/reels/
+      - name: Run Full Test Script
+        run: python pikpak_full_test.py
 
-      - name: Send URL to Folder
-        run: |
-          VIDEO_URL="https://www.youtube.com/watch?v=tdocUW4aKnY"
-          
-          echo "📡 Triggering Cloud Download into /R97group/phonkstax/reels/"
-          # Note the trailing slash after reels/ to ensure it's treated as a directory
-          rclone backend addurl mypikpak:/R97group/phonkstax/reels/ "$VIDEO_URL"
-
-      - name: Verify Transfer
-        run: |
-          echo "⏳ Waiting 10 seconds for transfer list to update..."
-          sleep 10
-          echo "📂 Current files in folder:"
-          rclone lsf mypikpak:/R97group/phonkstax/reels/
+      - name: Verify Local File
+        run: ls -lh # Lists files in the runner to prove the video is there
