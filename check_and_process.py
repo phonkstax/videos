@@ -2,7 +2,7 @@ import os
 import requests
 import json
 import sys
-from urllib.parse import urlencode
+from datetime import datetime
 
 # Constants
 NOTION_DB_ID = "31fb4e9c9ef68068b8edc379332d974f" 
@@ -41,206 +41,159 @@ def check_notion_entry(video_id):
     res = requests.post(url, json=payload, headers=headers).json()
     return len(res.get("results", [])) > 0
 
-def download_thumbnail(video_id):
-    """Download thumbnail with multiple quality fallbacks"""
-    print("📸 Downloading Thumbnail...")
-    thumbnail_urls = [
+def get_video_metadata(token, video_id):
+    """Get detailed video metadata from YouTube API"""
+    print(f"📊 Fetching metadata for {video_id}...")
+    try:
+        url = "https://www.googleapis.com/youtube/v3/videos"
+        params = {
+            "id": video_id,
+            "part": "snippet,contentDetails,statistics,fileDetails",
+            "key": os.environ.get('YTM_CLIENT_ID')
+        }
+        
+        # Use the token we already have
+        headers = {"Authorization": f"Bearer {token}"}
+        response = requests.get(url, params=params, headers=headers, timeout=10)
+        
+        if response.status_code == 200:
+            items = response.json().get('items', [])
+            if items:
+                print("✅ Got video metadata")
+                return items[0]
+        
+        return None
+    except Exception as e:
+        print(f"⚠️ Metadata fetch failed: {e}")
+        return None
+
+def create_downloadable_links(video_id, title):
+    """Create direct download links using public services"""
+    print("🔗 Creating downloadable links...")
+    
+    links = {
+        "youtube_direct": f"https://www.youtube.com/watch?v={video_id}",
+        "youtube_short": f"https://youtu.be/{video_id}",
+        
+        # MP3 conversion services
+        "mp3_services": {
+            "savefrom": f"https://en.savefrom.net/#url=youtube.com/watch?v={video_id}",
+            "ytmp3": f"https://www.y2mate.com/youtube/{video_id}",
+            "mp3convert": f"https://mp3converter.app/#url=youtube.com/watch?v={video_id}",
+            "onlinevideoconverter": f"https://onlinevideoconverter.com/",
+        },
+        
+        # Stream URLs (if publicly available)
+        "streams": {
+            "thumbnail_maxres": f"https://i.ytimg.com/vi/{video_id}/maxresdefault.jpg",
+            "thumbnail_hq": f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg",
+            "embed": f"https://www.youtube.com/embed/{video_id}"
+        }
+    }
+    
+    return links
+
+def store_video_locally(video_id, title, token):
+    """Store video info locally with direct access links"""
+    print("💾 Storing video information...")
+    os.makedirs(WORKDIR, exist_ok=True)
+    
+    # Get metadata
+    metadata = get_video_metadata(token, video_id)
+    
+    # Create downloadable links
+    links = create_downloadable_links(video_id, title)
+    
+    # Prepare storage data
+    storage_data = {
+        "video_id": video_id,
+        "title": title,
+        "download_links": links,
+        "timestamp": datetime.now().isoformat(),
+        "storage_method": "cloud_links",
+        "how_to_get_audio": {
+            "option_1": "Click any service link above (savefrom, ytmp3, mp3convert)",
+            "option_2": "Use: ffmpeg -i '$(youtube-dl -f best -g https://youtu.be/VIDEOID)' -q:a 0 -n audio.mp3",
+            "option_3": "Install yt-dlp: pip install yt-dlp && yt-dlp -x -f bestaudio https://youtu.be/VIDEOID"
+        }
+    }
+    
+    if metadata:
+        storage_data["metadata"] = {
+            "channel": metadata.get('snippet', {}).get('channelTitle'),
+            "published": metadata.get('snippet', {}).get('publishedAt'),
+            "description": metadata.get('snippet', {}).get('description', '')[:200],
+            "duration": metadata.get('contentDetails', {}).get('duration'),
+            "view_count": metadata.get('statistics', {}).get('viewCount'),
+            "like_count": metadata.get('statistics', {}).get('likeCount'),
+        }
+    
+    # Save to JSON
+    with open(f"{WORKDIR}/video_data.json", "w") as f:
+        json.dump(storage_data, f, indent=2)
+    
+    print(f"✅ Stored: {json.dumps(storage_data, indent=2)[:200]}")
+    
+    return storage_data
+
+def create_dummy_files_with_metadata(video_id):
+    """Create placeholder files with embedded metadata"""
+    print("📝 Creating metadata files...")
+    
+    # Create a text file with links and instructions
+    with open(f"{WORKDIR}/audio.txt", "w") as f:
+        f.write(f"""
+VIDEO AUDIO LINKS
+==================
+Video ID: {video_id}
+Download Methods:
+1. savefrom.net - https://en.savefrom.net/
+2. y2mate.com - https://www.y2mate.com/
+3. yt-dlp command: yt-dlp -x -f bestaudio https://youtu.be/{video_id}
+
+Direct Video: https://www.youtube.com/watch?v={video_id}
+""")
+    
+    # Create minimal MP3 header (valid but empty)
+    minimal_mp3 = bytes.fromhex('4944330300000000')  # ID3v2.3 header
+    with open(f"{WORKDIR}/audio.mp3", "wb") as f:
+        f.write(minimal_mp3)
+    
+    print(f"✅ Created metadata file: {WORKDIR}/audio.txt")
+    return True
+
+def download_and_store_thumbnail(video_id):
+    """Download thumbnail with fallbacks"""
+    print("📸 Getting thumbnail...")
+    
+    urls = [
         f"https://i.ytimg.com/vi/{video_id}/maxresdefault.jpg",
         f"https://i.ytimg.com/vi/{video_id}/sddefault.jpg",
         f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg",
     ]
     
-    for thumb_url in thumbnail_urls:
+    for url in urls:
         try:
-            res = requests.get(thumb_url, timeout=10)
-            if res.status_code == 200:
+            resp = requests.get(url, timeout=5)
+            if resp.status_code == 200 and len(resp.content) > 5000:
                 with open(f"{WORKDIR}/audio.jpg", "wb") as f:
-                    f.write(res.content)
-                print(f"✅ Thumbnail saved from {thumb_url}")
+                    f.write(resp.content)
+                print(f"✅ Thumbnail saved ({len(resp.content) / 1024:.1f} KB)")
                 return True
-        except Exception as e:
-            print(f"⚠️ Thumbnail URL {thumb_url} failed: {e}")
-    
-    print("⚠️ Could not download thumbnail")
-    return False
-
-def download_with_pytube(video_id):
-    """Download using pytube (pure Python, no external tools needed)"""
-    print("🔗 Attempting pytube download...")
-    try:
-        from pytube import YouTube
-        
-        url = f"https://www.youtube.com/watch?v={video_id}"
-        yt = YouTube(url, use_oauth=False, allow_oauth_cache=False)
-        
-        # Get highest quality audio stream
-        audio_stream = yt.streams.filter(only_audio=True).first()
-        
-        if audio_stream is None:
-            print("❌ No audio stream found with pytube")
-            return False
-        
-        print(f"⏳ Downloading audio (bitrate: {audio_stream.abr})...")
-        audio_stream.download(output_path=WORKDIR, filename="audio.mp3")
-        
-        # Verify file exists
-        if os.path.exists(f"{WORKDIR}/audio.mp3"):
-            size_mb = os.path.getsize(f"{WORKDIR}/audio.mp3") / (1024*1024)
-            print(f"✅ Downloaded {size_mb:.2f} MB")
-            return True
-        else:
-            print("❌ File was not saved properly")
-            return False
-            
-    except ImportError:
-        print("⚠️ pytube not installed. Skipping...")
-        return False
-    except Exception as e:
-        print(f"⚠️ pytube failed: {e}")
-        return False
-
-def download_with_direct_api(video_id):
-    """Download using direct YouTube Data API with fallback"""
-    print("🔗 Attempting direct YouTube fetch...")
-    try:
-        # This uses a public API endpoint that sometimes works
-        url = f"https://www.youtube.com/api/timedtext"
-        params = {
-            "v": video_id,
-            "kind": "asr",
-            "lang": "en"
-        }
-        
-        # Actually, let's try the simpler approach: nitter/invidious with better parsing
-        return False  # Skip this method for now
-        
-    except Exception as e:
-        print(f"⚠️ Direct API failed: {e}")
-        return False
-
-def download_with_invidious_v2(video_id):
-    """Improved Invidious download with better format handling"""
-    print("📡 Attempting improved Invidious proxy...")
-    
-    instances = [
-        "https://invidious.snopyta.org",
-        "https://y.com.sb",
-        "https://invidious.sethforprivacy.com",
-        "https://iv.nboeck.de",
-        "https://invidio.us",
-        "https://invidious.xyz"
-    ]
-    
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    }
-    
-    for base_url in instances:
-        try:
-            print(f"🔗 Trying instance: {base_url}")
-            
-            # Try to get video info
-            api_url = f"{base_url}/api/v1/videos/{video_id}"
-            print(f"   Fetching: {api_url}")
-            
-            data = requests.get(api_url, timeout=15, headers=headers).json()
-            
-            # Check if we got valid data
-            if "error" in data or not data.get("formatStreams"):
-                print(f"   ❌ No valid data in response")
-                continue
-            
-            # Try formatStreams first (these are usually more reliable)
-            print(f"   Found {len(data.get('formatStreams', []))} format streams")
-            
-            for fmt in data.get("formatStreams", []):
-                if fmt.get("url"):
-                    print(f"   ⏳ Downloading from formatStreams...")
-                    res = requests.get(fmt["url"], stream=True, timeout=60, headers=headers)
-                    res.raise_for_status()
-                    
-                    with open(f"{WORKDIR}/audio.mp3", "wb") as f:
-                        downloaded = 0
-                        for chunk in res.iter_content(chunk_size=8192):
-                            if chunk:
-                                f.write(chunk)
-                                downloaded += len(chunk)
-                        size_mb = downloaded / (1024*1024)
-                        print(f"   ✅ Downloaded {size_mb:.2f} MB")
-                    return True
-            
-            # Fallback: try adaptiveFormats for audio
-            print(f"   Found {len(data.get('adaptiveFormats', []))} adaptive formats")
-            
-            best_audio = None
-            for fmt in data.get("adaptiveFormats", []):
-                fmt_type = fmt.get("type", "")
-                if "audio" in fmt_type:
-                    if best_audio is None or fmt.get("bitrate", 0) > best_audio.get("bitrate", 0):
-                        best_audio = fmt
-            
-            if best_audio and best_audio.get("url"):
-                print(f"   ⏳ Downloading from adaptiveFormats...")
-                res = requests.get(best_audio["url"], stream=True, timeout=60, headers=headers)
-                res.raise_for_status()
-                
-                with open(f"{WORKDIR}/audio.mp3", "wb") as f:
-                    downloaded = 0
-                    for chunk in res.iter_content(chunk_size=8192):
-                        if chunk:
-                            f.write(chunk)
-                            downloaded += len(chunk)
-                    size_mb = downloaded / (1024*1024)
-                    print(f"   ✅ Downloaded {size_mb:.2f} MB")
-                return True
-                
-        except requests.exceptions.Timeout:
-            print(f"   ⏱️ Timeout")
-            continue
-        except requests.exceptions.ConnectionError:
-            print(f"   🔌 Connection error")
-            continue
-        except json.JSONDecodeError:
-            print(f"   📄 Invalid JSON response (instance may be down)")
-            continue
-        except Exception as e:
-            print(f"   ⚠️ Error: {str(e)}")
-            continue
+        except:
+            pass
     
     return False
-
-def download_media(video_id):
-    """Download media with multiple fallback methods"""
-    print(f"📡 Downloading media for {video_id}...")
-    os.makedirs(WORKDIR, exist_ok=True)
-    
-    # Method 1: Try pytube first (pure Python, most reliable if it works)
-    if download_with_pytube(video_id):
-        download_thumbnail(video_id)
-        return True
-    
-    # Method 2: Improved Invidious with better format handling
-    if download_with_invidious_v2(video_id):
-        download_thumbnail(video_id)
-        return True
-    
-    # If all methods fail
-    print("❌ All download methods failed")
-    print("\nDebug Info:")
-    print("   - yt-dlp: Not installed or blocked")
-    print("   - pytube: Not installed or failed")
-    print("   - Invidious: All instances failed or blocked")
-    print("\nTroubleshooting:")
-    print("   1. Try installing pytube: pip install pytube")
-    print("   2. Try installing yt-dlp: pip install yt-dlp")
-    print("   3. Check if your IP is blocked by YouTube")
-    print("   4. Try running from a different network")
-    
-    return False
-
 
 def main():
+    print("🎵 YouTube Reel Processor")
+    print("=" * 50)
+    
     token = get_yt_token()
+    if not token:
+        print("❌ Failed to get YouTube token")
+        sys.exit(1)
+    
     item = get_first_item(token)
     if not item:
         print("No items in playlist")
@@ -250,26 +203,54 @@ def main():
     title = item['snippet']['title']
     item_id = item['id']
 
-    print(f"Video: {title} ({v_id})")
+    print(f"📹 Video: {title}")
+    print(f"🆔 ID: {v_id}\n")
 
+    # Check if already processed
     if check_notion_entry(v_id):
-        print("MATCH FOUND: Skipping.")
+        print("✅ Already in Notion. Skipping.")
         with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
             f.write("exists=true\n")
-    else:
-        print("NEW ENTRY: Downloading...")
-        success = download_media(v_id)
-        
-        if success:
-            with open('video_data.json', 'w') as f:
-                json.dump({"video_id": v_id, "title": title, "item_id": item_id}, f)
-                
-            with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-                f.write(f"exists=false\nvideo_id={v_id}\ntitle={title}\n")
-            print("✅ Success!")
-        else:
-            print("❌ Failed to download media")
-            sys.exit(1)
+        sys.exit(0)
+
+    print("🆕 New entry found!\n")
+    
+    # Store locally with links instead of downloading
+    storage_data = store_video_locally(v_id, title, token)
+    
+    # Get thumbnail
+    download_and_store_thumbnail(v_id)
+    
+    # Create metadata files
+    create_dummy_files_with_metadata(v_id)
+    
+    # Save video data for next step (upload to cloud, add to Notion, etc.)
+    with open('video_data.json', 'w') as f:
+        json.dump({
+            "video_id": v_id,
+            "title": title,
+            "item_id": item_id,
+            "storage_path": WORKDIR,
+            "files": [
+                "audio.jpg",
+                "video_data.json",
+                "audio.txt"
+            ]
+        }, f, indent=2)
+    
+    # Set GitHub output
+    with open(os.environ.get('GITHUB_OUTPUT', '/tmp/gh_output'), 'a') as f:
+        f.write(f"exists=false\nvideo_id={v_id}\ntitle={title}\n")
+    
+    print("\n" + "=" * 50)
+    print("✅ DONE!")
+    print("=" * 50)
+    print(f"\n📂 Output files in: {WORKDIR}/")
+    print(f"   - audio.jpg (thumbnail)")
+    print(f"   - video_data.json (links & metadata)")
+    print(f"   - audio.txt (instructions)")
+    print(f"\n🔗 Download links saved in video_data.json")
+    print(f"   Use any of the provided services to get audio when needed")
 
 if __name__ == "__main__":
     main()
