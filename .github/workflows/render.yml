@@ -26,9 +26,13 @@ jobs:
           if [ ! -f ./assets/image/image.jpg ]; then echo "❌ Missing image.jpg"; exit 1; fi
           if [ ! -f ./assets/spotify.png ]; then echo "❌ Missing spotify.png"; exit 1; fi
 
-      - name: Run FFmpeg Render (Step 4)
-        run: bash 4_output.sh
-
+      - name: Step 4 - Find Best Part and Render
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          # No need for 'bc' anymore since Python handles the math
+          python 4_output.py
+          
       - name: Upload Test Result
         uses: actions/upload-artifact@v4
         with:
