@@ -28,13 +28,14 @@ jobs:
 
       - name: Step 3.5 - Extract Best Part
         run: |
-          # The script will now create ./assets/trim_audio/trim_audio.mp3
+          # This script is PYTHON, so we use 'python'
           python 3.5_trim_audio.py
 
       - name: Step 4 - Render Output
         run: |
-          # Ensure your Step 4 script now points to the trimmed file!
-          python 4_output.sh
+          # This script is a BASH script, so we MUST use 'bash'
+          # If you use 'python' here, it will crash with a SyntaxError
+          bash 4_output.sh
           
       - name: Upload Test Result
         uses: actions/upload-artifact@v4
