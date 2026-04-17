@@ -10,7 +10,6 @@ NOTION_PAGE_ID = "320b4e9c9ef680f3afaaee8b0450203a"
 PLAYLIST_ID = "PL8WGYt2fhenCJnBHFBKqw8SZl-oyO03Ur"
 
 def get_yt_token():
-    """Refreshes the YouTube OAuth2 token."""
     url = "https://oauth2.googleapis.com/token"
     try:
         oauth_data = json.loads(os.environ['YTM_OAUTH_JSON'])
@@ -26,8 +25,20 @@ def get_yt_token():
         print(f"❌ OAuth Refresh Failed: {e}")
         return None
 
+def clean_title(artist, track):
+    # 1. Remove " - Topic" from artist name
+    artist = re.sub(r'\s*-\s*Topic\s*$', '', artist, flags=re.IGNORECASE).strip()
+    
+    # 2. Remove "Release - " prefix from track if it exists
+    track = re.sub(r'^Release\s*-\s*', '', track, flags=re.IGNORECASE).strip()
+    
+    # 3. Handle cases where the track title already contains the artist
+    if artist.lower() in track.lower():
+        return track.strip()
+    
+    return f"{artist} - {track.strip()}"
+
 def check_notion_entry(video_id):
-    """Checks if the video already exists in the Notion DB."""
     url = f"https://api.notion.com/v1/databases/{NOTION_DB_ID}/query"
     payload = {
         "filter": {
@@ -46,25 +57,12 @@ def check_notion_entry(video_id):
     res = requests.post(url, json=payload, headers=headers).json()
     return len(res.get("results", [])) > 0
 
-def clean_title(artist, track):
-    """Removes 'Topic' and formats as 'Artist - Track'."""
-    # Remove " - Topic" from the artist name
-    clean_artist = re.sub(r'\s*-\s*Topic\s*$', '', artist, flags=re.IGNORECASE).strip()
-    return f"{clean_artist} - {track.strip()}"
-
 def main():
     token = get_yt_token()
-    if not token:
-        print("❌ Could not generate YouTube Access Token.")
-        sys.exit(1)
+    if not token: sys.exit(1)
 
-    # Fetch first playlist item
     url = "https://www.googleapis.com/youtube/v3/playlistItems"
-    params = {
-        "part": "snippet,contentDetails", 
-        "playlistId": PLAYLIST_ID, 
-        "maxResults": 1
-    }
+    params = {"part": "snippet,contentDetails", "playlistId": PLAYLIST_ID, "maxResults": 1}
     r = requests.get(url, params=params, headers={"Authorization": f"Bearer {token}"}).json()
     
     items = r.get('items', [])
@@ -73,19 +71,20 @@ def main():
         sys.exit(0)
 
     item = items[0]
-    vid_id = item['snippet']['resourceId']['videoId']
+    snippet = item['snippet']
+    vid_id = snippet['resourceId']['videoId']
     
-    # Logic to get Artist and Track name separately
-    raw_artist = item['snippet'].get('videoOwnerChannelTitle', 'Unknown Artist')
-    raw_track = item['snippet'].get('title', 'Unknown Track')
+    # Get Artist and Track
+    raw_artist = snippet.get('videoOwnerChannelTitle', 'Various Artists')
+    raw_track = snippet.get('title', 'Unknown Track')
     
+    # Apply cleaning
     final_title = clean_title(raw_artist, raw_track)
 
     if check_notion_entry(vid_id):
         print(f"⏩ {vid_id} ({final_title}) already exists in Notion. Skipping.")
         sys.exit(0)
 
-    # Prepare metadata for Step 2
     metadata = {
         "video_id": vid_id,
         "playlist_item_id": item['id'],
