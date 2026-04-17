@@ -1,0 +1,20 @@
+name: PikPak Bridge Test
+
+on:
+  workflow_dispatch: # Allows you to click "Run Workflow" manually
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rclone
+        run: sudo -v && curl https://rclone.org/install.sh | sudo bash
+
+      - name: Run Python Test
+        env:
+          PIKPAK_USER: ${{ secrets.PIKPAK_USER }}
+          PIKPAK_PASS: ${{ secrets.PIKPAK_PASS }}
+        run: python pikpak_test.py
