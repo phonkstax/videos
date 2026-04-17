@@ -26,24 +26,28 @@ def update_notion():
 
     # 2. Prepare the Page Data
     # Note: Ensure these property names match your Notion Database exactly!
+    # ... inside 6_notion_update.py ...
+    
     payload = {
         "parent": {"database_id": NOTION_DB_ID},
         "properties": {
-            "Name": {
+            # Fixed from 'Name' to 'Title'
+            "Title": {
                 "title": [{"text": {"content": meta['title']}}]
             },
+            # Matches your screenshot exactly
             "Video ID": {
                 "rich_text": [{"text": {"content": meta['video_id']}}]
             },
+            # Matches your screenshot exactly
             "Type": {
                 "select": {"name": "Reel"}
             },
+            # Matches your screenshot exactly
             "Channel": {
                 "relation": [{"id": PHONKSTAX_PAGE_ID}]
-            },
-            "URL": {
-                "url": meta['yt_url']
             }
+            # NOTE: Removed "URL" because it's not in your Notion database!
         }
     }
 
