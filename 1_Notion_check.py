@@ -9,24 +9,11 @@ NOTION_DB_ID = "31fb4e9c9ef68068b8edc379332d974f"
 NOTION_PAGE_ID = "320b4e9c9ef680f3afaaee8b0450203a"
 PLAYLIST_ID = "PL8WGYt2fhenCJnBHFBKqw8SZl-oyO03Ur"
 
-def clean_title(artist, track):
-    # 1. Strip "Release - " or "Release-" or "Release " from the very start
-    # This handles "Release - Distinct Memories" -> "Distinct Memories"
-    track = re.sub(r'^Release\s*[-–—]?\s*', '', track, flags=re.IGNORECASE).strip()
-    
-    # 2. Strip " - Topic" from the artist name
-    artist = re.sub(r'\s*[-–—]\s*Topic\s*$', '', artist, flags=re.IGNORECASE).strip()
-    
-    # 3. Decision Logic
-    # If artist is generic or missing, just return the cleaned track
-    if artist.lower() in ["various artists", "unknown artist", "", "youtube"]:
-        return track
-    
-    # If the track already contains the artist (YouTube sometimes puts both in title)
-    if artist.lower() in track.lower():
-        return track
-        
-    return f"{artist} - {track}"
+def clean_name(text):
+    """Helper to clean strings for filenames."""
+    text = re.sub(r'\s*[-–—]\s*Topic\s*$', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'^Release\s*[-–—]?\s*', '', text, flags=re.IGNORECASE)
+    return text.strip()
 
 def get_yt_token():
     url = "https://oauth2.googleapis.com/token"
@@ -40,7 +27,8 @@ def get_yt_token():
         }
         res = requests.post(url, data=payload)
         return res.json().get('access_token')
-    except:
+    except Exception as e:
+        print(f"❌ Token Error: {e}")
         return None
 
 def check_notion_entry(video_id):
@@ -67,35 +55,38 @@ def main():
     r = requests.get(url, params=params, headers={"Authorization": f"Bearer {token}"}).json()
     
     items = r.get('items', [])
-    if not items: sys.exit(0)
+    if not items:
+        print("❌ Playlist is empty.")
+        sys.exit(1) # FAIL if nothing to process
 
     item = items[0]
     snippet = item['snippet']
     vid_id = snippet['resourceId']['videoId']
     
-    # Extract raw data
-    raw_artist = snippet.get('videoOwnerChannelTitle', '')
-    raw_track = snippet.get('title', '')
-    
-    # CLEANING PHASE
-    final_title = clean_title(raw_artist, raw_track)
-
+    # 1. Check Notion FIRST
     if check_notion_entry(vid_id):
-        print(f"⏩ {vid_id} exists. Skipping.")
-        sys.exit(0)
+        print(f"⏩ {vid_id} already exists in Notion. Stopping workflow.")
+        sys.exit(1) # FAIL here so Step 2-5 don't run for no reason
 
-    # Save metadata
+    # 2. Extract and Clean
+    raw_artist = snippet.get('videoOwnerChannelTitle', 'Unknown Artist')
+    raw_track = snippet.get('title', 'Unknown Track')
+    
+    artist = clean_name(raw_artist)
+    track = clean_name(raw_track)
+
+    # 3. Save Metadata (Important: artist and track separate for Step 4)
     metadata = {
+        "artist": artist,
+        "track": track,
         "video_id": vid_id,
-        "playlist_item_id": item['id'],
-        "title": final_title,
         "yt_url": f"https://www.youtube.com/watch?v={vid_id}"
     }
     
     with open("metadata.json", "w") as f:
         json.dump(metadata, f, indent=4)
     
-    print(f"📝 Metadata saved: {final_title}")
+    print(f"✅ metadata.json created for: {artist} - {track}")
 
 if __name__ == "__main__":
     main()
