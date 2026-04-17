@@ -26,12 +26,15 @@ jobs:
           if [ ! -f ./assets/image/image.jpg ]; then echo "❌ Missing image.jpg"; exit 1; fi
           if [ ! -f ./assets/spotify.png ]; then echo "❌ Missing spotify.png"; exit 1; fi
 
-      - name: Step 3.5_trim_audio
+      - name: Step 3.5 - Extract Best Part
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg
-          # No need for 'bc' anymore since Python handles the math
-          python 3.5_trim_audio.py
+          # The script will now create ./assets/trim_audio/trim_audio.mp3
+          python 3_5_trim_audio.py
+
+      - name: Step 4 - Render Output
+        run: |
+          # Ensure your Step 4 script now points to the trimmed file!
+          python 4_output.py
           
       - name: Upload Test Result
         uses: actions/upload-artifact@v4
