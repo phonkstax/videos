@@ -30,16 +30,18 @@ def main():
     track = clean_name(raw_track)
 
     # --- SAVE EVERYTHING ---
+# ... (at the end of your main function)
     metadata = {
-        "artist": artist,
-        "track": track,
-        "video_id": vid_id,
-        "playlist_item_id": playlist_item_id, 
-        "yt_url": f"https://www.youtube.com/watch?v={vid_id}"
+        "title": title,
+        "video_id": v_id,
+        "playlist_item_id": item_id,
+        "yt_url": f"https://www.youtube.com/watch?v={v_id}"
     }
     
     with open("metadata.json", "w") as f:
         json.dump(metadata, f, indent=4)
+    
+    print(f"✅ metadata.json saved for {title}")
     
     # --- LOUD LOGGING ---
     print("--------------------------------------------------")
