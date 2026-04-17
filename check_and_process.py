@@ -2,6 +2,7 @@ import os
 import requests
 import json
 import sys
+import subprocess
 
 # Constants
 NOTION_DB_ID = "31fb4e9c9ef68068b8edc379332d974f" 
@@ -40,52 +41,119 @@ def check_notion_entry(video_id):
     res = requests.post(url, json=payload, headers=headers).json()
     return len(res.get("results", [])) > 0
 
+def download_thumbnail(video_id):
+    """Download thumbnail with multiple quality fallbacks"""
+    print("📸 Downloading Thumbnail...")
+    thumbnail_urls = [
+        f"https://i.ytimg.com/vi/{video_id}/maxresdefault.jpg",
+        f"https://i.ytimg.com/vi/{video_id}/sddefault.jpg",
+        f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg",
+    ]
+    
+    for thumb_url in thumbnail_urls:
+        try:
+            res = requests.get(thumb_url, timeout=10)
+            if res.status_code == 200:
+                with open(f"{WORKDIR}/audio.jpg", "wb") as f:
+                    f.write(res.content)
+                print(f"✅ Thumbnail saved")
+                return True
+        except Exception as e:
+            print(f"⚠️ Thumbnail URL {thumb_url} failed: {e}")
+    
+    print("⚠️ Could not download thumbnail")
+    return False
+
 def download_media(video_id):
-    print(f"📡 Attempting Invidious Proxy for {video_id}...")
+    """Download media using yt-dlp (most reliable method)"""
+    print(f"📡 Downloading media for {video_id}...")
     os.makedirs(WORKDIR, exist_ok=True)
     
-    # List of public Invidious instances to rotate if one fails
+    # Try yt-dlp first (most reliable)
+    try:
+        print("🔗 Attempting yt-dlp download...")
+        cmd = [
+            "yt-dlp",
+            "-f", "bestaudio/best",
+            "-x", "--audio-format", "mp3",
+            "-o", f"{WORKDIR}/audio.mp3",
+            f"https://www.youtube.com/watch?v={video_id}"
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        
+        if result.returncode == 0 and os.path.exists(f"{WORKDIR}/audio.mp3"):
+            print("🎉 Audio downloaded successfully with yt-dlp!")
+            download_thumbnail(video_id)
+            return True
+        else:
+            print(f"⚠️ yt-dlp failed: {result.stderr}")
+    except Exception as e:
+        print(f"⚠️ yt-dlp not available or failed: {e}")
+    
+    # Fallback: Invidious proxy
+    print("📡 Falling back to Invidious proxy...")
     instances = [
         "https://invidious.snopyta.org",
         "https://y.com.sb",
-        "https://invidious.sethforprivacy.com"
+        "https://invidious.sethforprivacy.com",
+        "https://iv.nboeck.de"
     ]
     
     for base_url in instances:
         try:
-            print(f"🔗 Trying instance: {base_url}")
+            print(f"🔗 Trying Invidious instance: {base_url}")
             api_url = f"{base_url}/api/v1/videos/{video_id}"
-            data = requests.get(api_url, timeout=20).json()
+            data = requests.get(api_url, timeout=15).json()
             
-            # Find the best audio-only stream
-            # Invidious formats are often more stable for direct download
+            # Log available formats for debugging
             formats = data.get("adaptiveFormats", [])
-            audio_url = None
-            for f in formats:
-                if "audio/" in f.get("type", ""):
-                    audio_url = f.get("url")
-                    break
+            print(f"   Found {len(formats)} formats")
             
-            if audio_url:
-                print("⏳ Downloading Audio...")
-                res = requests.get(audio_url, stream=True, timeout=60)
+            # Find best audio stream
+            best_audio = None
+            for fmt in formats:
+                fmt_type = fmt.get("type", "")
+                if "audio/mp4" in fmt_type or "audio/webm" in fmt_type:
+                    # Prefer higher bitrate
+                    if best_audio is None or fmt.get("bitrate", 0) > best_audio.get("bitrate", 0):
+                        best_audio = fmt
+            
+            if best_audio and best_audio.get("url"):
+                audio_url = best_audio["url"]
+                bitrate = best_audio.get("bitrate", "unknown")
+                print(f"   ⏳ Downloading audio (bitrate: {bitrate})...")
+                
+                res = requests.get(audio_url, stream=True, timeout=60, headers={
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                })
+                res.raise_for_status()
+                
                 with open(f"{WORKDIR}/audio.mp3", "wb") as f:
+                    downloaded = 0
                     for chunk in res.iter_content(chunk_size=8192):
-                        f.write(chunk)
+                        if chunk:
+                            f.write(chunk)
+                            downloaded += len(chunk)
+                    print(f"   Downloaded {downloaded / (1024*1024):.2f} MB")
                 
-                # Thumbnail
-                thumb_url = f"https://i3.ytimg.com/vi/{video_id}/maxresdefault.jpg"
-                with open(f"{WORKDIR}/audio.jpg", "wb") as f:
-                    f.write(requests.get(thumb_url).content)
-                
+                download_thumbnail(video_id)
                 print("🎉 Success via Invidious!")
                 return True
+            else:
+                print(f"   ❌ No audio format found")
+                
+        except requests.exceptions.Timeout:
+            print(f"   ⏱️ Timeout on {base_url}")
+        except requests.exceptions.ConnectionError:
+            print(f"   🔌 Connection error on {base_url}")
+        except json.JSONDecodeError:
+            print(f"   📄 Invalid JSON response from {base_url}")
         except Exception as e:
-            print(f"⚠️ Instance {base_url} failed. Trying next...")
+            print(f"   ⚠️ Error with {base_url}: {str(e)}")
             continue
-            
-    print("❌ All mirrors failed. YouTube is blocking the runner IP.")
-    sys.exit(1)
+    
+    print("❌ All methods failed. Unable to download media.")
+    return False
 
 
 def main():
@@ -104,13 +172,17 @@ def main():
             f.write("exists=true\n")
     else:
         print("NEW ENTRY: Downloading...")
-        download_media(v_id)
+        success = download_media(v_id)
         
-        with open('video_data.json', 'w') as f:
-            json.dump({"video_id": v_id, "title": title, "item_id": item_id}, f)
-            
-        with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-            f.write(f"exists=false\nvideo_id={v_id}\ntitle={title}\n")
+        if success:
+            with open('video_data.json', 'w') as f:
+                json.dump({"video_id": v_id, "title": title, "item_id": item_id}, f)
+                
+            with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+                f.write(f"exists=false\nvideo_id={v_id}\ntitle={title}\n")
+        else:
+            print("❌ Failed to download media")
+            sys.exit(1)
 
 if __name__ == "__main__":
     main()
