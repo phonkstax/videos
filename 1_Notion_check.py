@@ -8,12 +8,11 @@ NOTION_DB_ID = "31fb4e9c9ef68068b8edc379332d974f"
 NOTION_PAGE_ID = "320b4e9c9ef680f3afaaee8b0450203a"
 PLAYLIST_ID = "PL8WGYt2fhenCJnBHFBKqw8SZl-oyO03Ur"
 
-def clean_title(title):
-    # 1. Remove " - Topic" or " (Topic)" anywhere in the string
-    cleaned = re.sub(r'\s*\(?-\s*Topic\)?\s*', '', title, flags=re.IGNORECASE)
-    # 2. If it's "Artist - Track - Topic", this ensures only "Artist - Track" remains
-    cleaned = cleaned.strip()
-    return cleaned
+def clean_title(artist, track):
+    # Remove "- Topic" from artist name
+    artist = re.sub(r'\s*-\s*Topic\s*$', '', artist, flags=re.IGNORECASE).strip()
+    # Combine into your requested format
+    return f"{artist} - {track.strip()}"
 
 def get_yt_token():
     url = "https://oauth2.googleapis.com/token"
@@ -24,8 +23,7 @@ def get_yt_token():
         "refresh_token": oauth_data['refresh_token'],
         "grant_type": "refresh_token"
     }
-    res = requests.post(url, data=payload).json()
-    return res.get('access_token')
+    return requests.post(url, data=payload).json().get('access_token')
 
 def check_notion_entry(video_id):
     url = f"https://api.notion.com/v1/databases/{NOTION_DB_ID}/query"
@@ -38,11 +36,7 @@ def check_notion_entry(video_id):
             ]
         }
     }
-    headers = {
-        "Authorization": f"Bearer {os.environ['NOTION_TOKEN']}", 
-        "Notion-Version": "2022-06-28", 
-        "Content-Type": "application/json"
-    }
+    headers = {"Authorization": f"Bearer {os.environ['NOTION_TOKEN']}", "Notion-Version": "2022-06-28", "Content-Type": "application/json"}
     res = requests.post(url, json=payload, headers=headers).json()
     return len(res.get("results", [])) > 0
 
@@ -50,6 +44,7 @@ def main():
     token = get_yt_token()
     if not token: sys.exit(1)
 
+    # Get first item from playlist
     url = "https://www.googleapis.com/youtube/v3/playlistItems"
     params = {"part": "snippet,contentDetails", "playlistId": PLAYLIST_ID, "maxResults": 1}
     r = requests.get(url, params=params, headers={"Authorization": f"Bearer {token}"}).json()
@@ -59,10 +54,12 @@ def main():
 
     item = items[0]
     vid_id = item['snippet']['resourceId']['videoId']
-    raw_title = item['snippet']['title']
     
-    # Clean the title
-    final_title = clean_title(raw_title)
+    # FETCH ARTIST (Channel Title) and TRACK (Video Title)
+    artist_raw = item['snippet']['videoOwnerChannelTitle'] # This gets the Artist name
+    track_raw = item['snippet']['title']
+    
+    final_title = clean_title(artist_raw, track_raw)
 
     if check_notion_entry(vid_id):
         print(f"⏩ {vid_id} exists. Skipping.")
