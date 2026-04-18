@@ -3,14 +3,13 @@ import requests
 import json
 import sys
 import re
-
-# Constants
-NOTION_DB_ID = "31fb4e9c9ef68068b8edc379332d974f" 
-NOTION_PAGE_ID = "320b4e9c9ef680f3afaaee8b0450203a"
-PLAYLIST_ID = "PL8WGYt2fhenCJnBHFBKqw8SZl-oyO03Ur"
+ 
+# --- CONFIGURATION (Now pulled from Environment Variables) ---
+NOTION_DB_ID = os.environ.get('NOTION_DB_ID')
+NOTION_PAGE_ID = os.environ.get('NOTION_PAGE_ID')
+PLAYLIST_ID = os.environ.get('PLAYLIST_ID')
 
 def clean_name(text):
-    """Helper to clean strings for filenames."""
     text = re.sub(r'\s*[-–—]\s*Topic\s*$', '', text, flags=re.IGNORECASE)
     text = re.sub(r'^Release\s*[-–—]?\s*', '', text, flags=re.IGNORECASE)
     return text.strip()
@@ -26,13 +25,39 @@ def get_yt_token():
             "grant_type": "refresh_token"
         }
         res = requests.post(url, data=payload)
+        res.raise_for_status()
         return res.json().get('access_token')
     except Exception as e:
-        print(f"❌ Token Error: {e}")
+        print(f"❌ YouTube Auth Error: {e}")
         return None
 
+def delete_playlist_item(token, playlist_item_id):
+    url = "https://www.googleapis.com/youtube/v3/playlistItems"
+    headers = {"Authorization": f"Bearer {token}"}
+    params = {"id": playlist_item_id}
+    
+    print(f"🗑️ Attempting to delete playlist item: {playlist_item_id}...")
+    try:
+        response = requests.delete(url, headers=headers, params=params)
+        if response.status_code == 204:
+            print("✅ Successfully deleted from YouTube Playlist.")
+        else:
+            print(f"⚠️ Delete failed. Status: {response.status_code}")
+    except Exception as e:
+        print(f"❌ Error during deletion: {e}")
+
 def check_notion_entry(video_id):
+    # Ensure variables exist
+    if not NOTION_DB_ID or not NOTION_PAGE_ID:
+        print("❌ Error: NOTION_DB_ID or NOTION_PAGE_ID secret is missing.")
+        return False
+
     url = f"https://api.notion.com/v1/databases/{NOTION_DB_ID}/query"
+    headers = {
+        "Authorization": f"Bearer {os.environ['NOTION_TOKEN']}",
+        "Notion-Version": "2022-06-28",
+        "Content-Type": "application/json"
+    }
     payload = {
         "filter": {
             "and": [
@@ -42,14 +67,24 @@ def check_notion_entry(video_id):
             ]
         }
     }
-    headers = {"Authorization": f"Bearer {os.environ['NOTION_TOKEN']}", "Notion-Version": "2022-06-28"}
-    res = requests.post(url, json=payload, headers=headers).json()
-    return len(res.get("results", [])) > 0
+    
+    try:
+        response = requests.post(url, json=payload, headers=headers)
+        res_data = response.json()
+        return len(res_data.get("results", [])) > 0
+    except:
+        return False
 
 def main():
+    # Verify Playlist ID exists
+    if not PLAYLIST_ID:
+        print("❌ Error: PLAYLIST_ID secret is missing.")
+        sys.exit(1)
+
     token = get_yt_token()
     if not token: sys.exit(1)
 
+    # 1. Fetch Playlist
     url = "https://www.googleapis.com/youtube/v3/playlistItems"
     params = {"part": "snippet,contentDetails", "playlistId": PLAYLIST_ID, "maxResults": 1}
     r = requests.get(url, params=params, headers={"Authorization": f"Bearer {token}"}).json()
@@ -57,36 +92,37 @@ def main():
     items = r.get('items', [])
     if not items:
         print("❌ Playlist is empty.")
-        sys.exit(1) # FAIL if nothing to process
+        sys.exit(1)
 
     item = items[0]
-    snippet = item['snippet']
-    vid_id = snippet['resourceId']['videoId']
+    playlist_item_id = item.get('id') 
+    vid_id = item['snippet']['resourceId']['videoId']
     
-    # 1. Check Notion FIRST
+    # 2. Check Notion
     if check_notion_entry(vid_id):
-        print(f"⏩ {vid_id} already exists in Notion. Stopping workflow.")
-        sys.exit(1) # FAIL here so Step 2-5 don't run for no reason
+        print(f"🚩 MATCH FOUND: {vid_id} is already in Notion.")
+        delete_playlist_item(token, playlist_item_id)
+        print("⏩ Stopping workflow. Duplicate removed.")
+        sys.exit(1)
 
-    # 2. Extract and Clean
-    raw_artist = snippet.get('videoOwnerChannelTitle', 'Unknown Artist')
-    raw_track = snippet.get('title', 'Unknown Track')
-    
-    artist = clean_name(raw_artist)
-    track = clean_name(raw_track)
+    # 3. Process New Track
+    raw_artist = item['snippet'].get('videoOwnerChannelTitle', 'Unknown')
+    raw_track = item['snippet'].get('title', 'Unknown')
+    artist, track = clean_name(raw_artist), clean_name(raw_track)
 
-    # 3. Save Metadata (Important: artist and track separate for Step 4)
     metadata = {
+        "title": f"{artist} - {track}",
         "artist": artist,
         "track": track,
         "video_id": vid_id,
+        "playlist_item_id": playlist_item_id, 
         "yt_url": f"https://www.youtube.com/watch?v={vid_id}"
     }
     
     with open("metadata.json", "w") as f:
         json.dump(metadata, f, indent=4)
     
-    print(f"✅ metadata.json created for: {artist} - {track}")
+    print(f"✅ New Track Prepared: {artist} - {track}")
 
 if __name__ == "__main__":
     main()
