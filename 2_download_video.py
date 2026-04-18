@@ -108,9 +108,9 @@ def download():
         
         # --- THE FIX FOR STEP 8 ---
         # Update metadata with the exact cloud filename
-        meta['cloud_file_name'] = file_name
-        with open("metadata.json", "w") as f:
-            json.dump(meta, f, indent=4)
+meta['cloud_file_name'] = file_name
+with open("metadata.json", "w") as f:
+    json.dump(meta, f, indent=4)
         print(f"📝 Cloud filename saved for cleanup.")
     else:
         sys.exit(1)
