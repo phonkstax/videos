@@ -40,20 +40,37 @@ def download():
             try: os.remove(f)
             except: pass
 
-    # 3. Trigger PikPak
-    print(f"📡 Dispatching Cloud Request for: {VIDEO_URL}")
-    run_cmd(["rclone", "mkdir", f"{REMOTE}:{REMOTE_PATH}"])
-    send_res = run_cmd(["rclone", "backend", "addurl", f"{REMOTE}:{REMOTE_PATH}", VIDEO_URL])
+    # 3. CHECK IF FILE ALREADY EXISTS IN PIKPAK (The "Rerun Speedup")
+    print(f"📡 Checking if file exists in Cloud...")
     
-    try:
-        task_data = json.loads(send_res.stdout)
-        file_name = task_data.get("file_name")
-        print(f"✅ Target Locked: {file_name}")
-    except:
-        print(f"❌ PikPak Error: {send_res.stderr or send_res.stdout}")
-        sys.exit(1)
+    # We check the directory once before dispatching a new task
+    list_check = run_cmd(["rclone", "lsf", f"{REMOTE}:{REMOTE_PATH}"])
+    
+    # PikPak usually names YouTube files starting with 'www.youtube.com_watch'
+    # Or you can look for the specific Video ID if you want to be 100% precise
+    existing_file = None
+    for line in list_check.stdout.splitlines():
+        if meta['video_id'] in line or "www.youtube.com_watch" in line:
+            existing_file = line
+            break
 
-    # 4. Polling Loop (Your old logic + spinner)
+    if existing_file:
+        print(f"⏩ Instant Hit! Found existing file: {existing_file}")
+        file_name = existing_file
+    else:
+        print(f"🆕 No existing file found. Dispatching fresh Cloud Request...")
+        run_cmd(["rclone", "mkdir", f"{REMOTE}:{REMOTE_PATH}"])
+        send_res = run_cmd(["rclone", "backend", "addurl", f"{REMOTE}:{REMOTE_PATH}", VIDEO_URL])
+        
+        try:
+            task_data = json.loads(send_res.stdout)
+            file_name = task_data.get("file_name")
+            print(f"✅ Target Locked: {file_name}")
+        except:
+            print(f"❌ PikPak Error: {send_res.stderr or send_res.stdout}")
+            sys.exit(1)
+
+    # 4. Polling Loop
     print(f"⏳ Waiting for Cloud Muxing...")
     spinner = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
     
@@ -62,10 +79,11 @@ def download():
         list_cmd = run_cmd(["rclone", "lsf", f"{REMOTE}:{REMOTE_PATH}"])
         
         if file_name in list_cmd.stdout:
-            # Check if file size is > 0 (stitching check)
+            # Check size to ensure PikPak finished stitching
             size_cmd = run_cmd(["rclone", "lsjson", f"{REMOTE}:{REMOTE_PATH}{file_name}"])
             try:
                 size_data = json.loads(size_cmd.stdout)[0]
+                # If size is > 1KB, it's ready
                 if size_data.get("Size", 0) > 1000:
                     print(f"\n✨ FILE READY! Size: {size_data['Size']/1024/1024:.2f} MB")
                     break
