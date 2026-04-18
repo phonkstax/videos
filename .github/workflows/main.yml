@@ -106,6 +106,5 @@ jobs:
       - name: 📦 Archive Final Video (GitHub Artifact)
         if: always()
         uses: actions/upload-artifact@v4
-        with:
-          name: generated-reels
-          path: output/
+       
+        
