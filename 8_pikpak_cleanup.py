@@ -1,38 +1,45 @@
 import os
 import json
 import subprocess
-import sys
 
-def direct_cleanup():
-    # 1. Load metadata to find the exact filename we used
+def pattern_cleanup():
+    # 1. Load metadata to find the specific Video ID processed in this run
     if not os.path.exists("metadata.json"):
-        print("⚠️ metadata.json not found. Nothing to clean.")
+        print("⚠️ metadata.json not found. Cleanup skipped.")
         return
 
     with open("metadata.json", "r") as f:
         meta = json.load(f)
 
-    # Get the specific filename saved by Step 2
-    file_name = meta.get('cloud_file_name')
+    # Use the unique Video ID (e.g., SVP1hF7hNxQ) as the search pattern
+    video_id = meta.get('video_id')
     remote_name = "mypikpak"
     remote_path = "Download/temp/"
 
-    if not file_name:
-        print("⚠️ No cloud_file_name found in metadata. Skip cleanup.")
+    if not video_id:
+        print("⚠️ No video_id found in metadata. Cannot perform cleanup.")
         return
 
-    print(f"🗑️ Targeting specific file for deletion: {file_name}")
+    print(f"🧹 Searching for all files containing ID: {video_id}")
     
-    # 2. Use rclone deletefile to remove ONLY this specific file
-    # We use Download/temp/ without the leading slash for better compatibility
-    cmd = ["rclone", "deletefile", f"{remote_name}:{remote_path}{file_name}"]
+    # 2. Use 'rclone delete' with an include pattern
+    # Pattern: *ID* matches 'Song_ID.webm', 'Song_ID(1).webm', etc.
+    remote_target = f"{remote_name}:{remote_path}"
+    pattern = f"*{video_id}*"
+    
+    # We use 'delete' with '--include' to target multiple matching files at once
+    cmd = [
+        "rclone", "delete", remote_target, 
+        "--include", pattern
+    ]
+    
     res = subprocess.run(cmd, capture_output=True, text=True)
 
     if res.returncode == 0:
-        print(f"✅ Successfully deleted {file_name} from PikPak.")
+        print(f"🗑️ Successfully purged all versions of {video_id} (including duplicates).")
     else:
-        # If the file is already gone, we don't want to fail the whole workflow
-        print(f"ℹ️ Cleanup note: {res.stderr.strip()}")
+        # If no file was found, rclone might exit with an error; we log it but don't stop the job
+        print(f"ℹ️ Cleanup Note: {res.stderr.strip() if res.stderr else 'No files found to delete.'}")
 
 if __name__ == "__main__":
-    direct_cleanup()
+    pattern_cleanup()
