@@ -10,7 +10,7 @@ OUT_DIR="./output"
 mkdir -p "$OUT_DIR"
 
 # --- CLEAN OUTPUT FOLDER ---
-rm -rf ./output/*
+rm -rf "$OUT_DIR"/*
 git add -A
 
 # 1. READ METADATA
@@ -27,14 +27,16 @@ FINAL_OUT="$OUT_DIR/$FILENAME"
 # 2. VERIFY ASSETS
 if [ ! -f "$AUDIO" ]; then echo "❌ Missing audio"; exit 1; fi
 
-# 3. AUTO-CALCULATE TIMINGS
+# 3. TIMING CALCULATIONS
+# Logo: starts at 5s, stays for 5s (ends at 10s)
+LOGO_START=5
+LOGO_END=10
 DURATION=$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$AUDIO")
-LOGO_START=$(echo "$DURATION / 2" | bc -l)
 FADE_OUT=$(echo "$DURATION - 2" | bc -l)
 
-echo "🎬 Rendering Landscape: $FILENAME"
+echo "🎬 Rendering Landscape with Shake: $FILENAME"
 
-# 4. RENDER ENGINE (Landscape 1920x1080)
+# 4. RENDER ENGINE
 ffmpeg -y \
 -t "$DURATION" -loop 1 -i "$IMAGE" \
 -t "$DURATION" -i "$AUDIO" \
@@ -42,13 +44,14 @@ ffmpeg -y \
 -filter_complex "
 [0:v]format=yuv420p,crop=min(iw\,ih):min(iw\,ih),scale=800:800,eq=saturation=1.2:contrast=1.05[fg];
 [0:v]format=yuv420p,scale=1920:1080:force_original_aspect_ratio=increase,
-crop=1920:1080,gblur=sigma=20,
-zoompan=z='1.02+0.01*sin(on*0.1)':d=1:s=1920x1080:fps=30[bg];
-[bg][fg]overlay=(W-w)/2:(H-h)/2[vbase];
-[2:v]scale=150:-1[logo_resized];
-[logo_resized]fade=t=in:st=$LOGO_START:d=0.6:alpha=1,
-fade=t=out:st=$FADE_OUT:d=2:alpha=1[logofaded];
-[vbase][logofaded]overlay=W-w-50:H-h-50:enable='between(t,$LOGO_START,$DURATION)',format=yuv420p[v];
+crop=1920:1080,gblur=sigma=15,
+zoompan=z='1.05+0.03*sin(on*0.5)':d=1:s=1920x1080:fps=30,
+rotate='0.05*sin(2*PI*t/0.5)':fillcolor=black@0[bg_shaky];
+[bg_shaky][fg]overlay=(W-w)/2:(H-h)/2[vbase];
+[2:v]scale=100:-1[logo_small];
+[logo_small]fade=t=in:st=$LOGO_START:d=0.5:alpha=1,
+fade=t=out:st=$LOGO_END:d=0.5:alpha=1[logofaded];
+[vbase][logofaded]overlay=40:40:enable='between(t,$LOGO_START,$LOGO_END+1)',format=yuv420p[v];
 [1:a]afade=t=in:st=0:d=1.5,afade=t=out:st=$FADE_OUT:d=2[a]
 " \
 -map "[v]" \
