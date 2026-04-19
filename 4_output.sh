@@ -38,14 +38,22 @@ ffmpeg -y \
 -t "$DURATION" -i "$AUDIO" \
 -t "$DURATION" -loop 1 -i "$LOGO" \
 -filter_complex "
-[0:v]format=yuv420p,crop=min(iw\,ih):min(iw\,ih),scale=800:800[cover];
+[0:v]format=yuv420p,
+crop=min(iw\,ih):min(iw\,ih),
+scale=800:800,
+fade=t=in:st=0:d=1,
+fade=t=out:st=$VIDEO_FADE_OUT:d=1[cover];
 
 [0:v]format=yuv420p,
 crop=min(iw\,ih):min(iw\,ih),
 scale=1920:1080:force_original_aspect_ratio=increase,
 gblur=sigma=25,
-rotate='0.05*sin(2*PI*t/3)':fillcolor=black@0,
+
+zoompan=z='1.05-0.03*sin(2*PI*t/8)':d=1:s=1920x1080:fps=30,
+
+rotate='0.03*sin(2*PI*t/5)':fillcolor=black@0,
 crop=1920:1080,
+
 fade=t=in:st=0:d=1,
 fade=t=out:st=$VIDEO_FADE_OUT:d=1[bg];
 
