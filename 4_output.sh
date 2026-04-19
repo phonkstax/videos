@@ -37,18 +37,18 @@ AUDIO_FADE_OUT=$(echo "$DURATION - 1.5" | bc -l)
 echo "🎬 Rendering: $FILENAME"
 echo "⏱️ Duration: $DURATION"
 
-# 4. FFmpeg
+# 4. RENDER
 ffmpeg -y \
 -t "$DURATION" -loop 1 -i "$IMAGE" \
 -t "$DURATION" -i "$AUDIO" \
 -t "$DURATION" -loop 1 -i "$LOGO" \
 -filter_complex "
-# --- COVER IMAGE (front)
+# --- FRONT COVER
 [0:v]format=yuv420p,
 crop=min(iw\,ih):min(iw\,ih),
 scale=800:800[cover];
 
-# --- BACKGROUND (smooth infinite motion)
+# --- BACKGROUND (blur + motion + shake)
 [0:v]format=yuv420p,
 crop=min(iw\,ih):min(iw\,ih),
 scale=1920:1080:force_original_aspect_ratio=increase,
