@@ -8,7 +8,7 @@ METADATA="metadata.json"
 OUT_DIR="./output"
 
 mkdir -p "$OUT_DIR"
-rm -rf ./output/*
+rm -rf "$OUT_DIR"/*
 git add -A
 
 # 1. READ METADATA
@@ -43,36 +43,12 @@ ffmpeg -y \
 -t "$DURATION" -i "$AUDIO" \
 -t "$DURATION" -loop 1 -i "$LOGO" \
 -filter_complex "
-
-# ----- COVER (front image)
-[0:v]format=yuv420p,
-crop=min(iw\,ih):min(iw\,ih),
-scale=800:800[cover];
-
-# ----- BACKGROUND (blur + zoom + shake)
-[0:v]format=yuv420p,
-crop=min(iw\,ih):min(iw\,ih),
-scale=1920:1080:force_original_aspect_ratio=increase,
-gblur=sigma=20,
-zoompan=z='1.03+0.01*sin(on*0.3)':d=1:s=1920x1080:fps=30,
-rotate='0.03*sin(2*PI*t/4)':fillcolor=black@0,
-crop=1920:1080,
-fade=t=in:st=0:d=1,
-fade=t=out:st=$VIDEO_FADE_OUT:d=1[bg];
-
-# ----- CENTER COVER
+[0:v]format=yuv420p,crop=min(iw\,ih):min(iw\,ih),scale=800:800[cover];
+[0:v]format=yuv420p,crop=min(iw\,ih):min(iw\,ih),scale=1920:1080:force_original_aspect_ratio=increase,gblur=sigma=20,zoompan=z='1.03+0.01*sin(on*0.3)':d=1:s=1920x1080:fps=30,rotate='0.03*sin(2*PI*t/4)':fillcolor=black@0,crop=1920:1080,fade=t=in:st=0:d=1,fade=t=out:st=$VIDEO_FADE_OUT:d=1[bg];
 [bg][cover]overlay=(W-w)/2:(H-h)/2[vbase];
-
-# ----- LOGO (top-left, 5s → 10s)
-[2:v]scale=180:-1,
-fade=t=in:st=5:d=1:alpha=1,
-fade=t=out:st=10:d=1:alpha=1[logo];
-
+[2:v]scale=180:-1,fade=t=in:st=5:d=1:alpha=1,fade=t=out:st=10:d=1:alpha=1[logo];
 [vbase][logo]overlay=20:20:enable='between(t,5,10)'[v];
-
-# ----- AUDIO
-[1:a]afade=t=in:st=0:d=1.5,
-afade=t=out:st=$AUDIO_FADE_OUT:d=1.5[a]
+[1:a]afade=t=in:st=0:d=1.5,afade=t=out:st=$AUDIO_FADE_OUT:d=1.5[a]
 " \
 -map "[v]" \
 -map "[a]" \
@@ -81,7 +57,7 @@ afade=t=out:st=$AUDIO_FADE_OUT:d=1.5[a]
 -c:a aac -b:a 192k \
 "$FINAL_OUT"
 
-# 5. RESULT
+# 5. RESULT CHECK
 if [ $? -eq 0 ]; then
   echo "✅ Success: $FINAL_OUT"
 else
