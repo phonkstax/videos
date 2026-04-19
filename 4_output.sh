@@ -11,7 +11,6 @@ mkdir -p "$OUT_DIR"
 
 # --- CLEAN OUTPUT FOLDER ---
 rm -rf "$OUT_DIR"/*
-git add -A
 
 # 1. READ METADATA
 if [ -f "$METADATA" ]; then
@@ -30,11 +29,13 @@ if [ ! -f "$AUDIO" ]; then echo "❌ Missing audio"; exit 1; fi
 # 3. TIMING CALCULATIONS
 LOGO_START=5
 LOGO_END=10
-# Get exact duration for the filters
 DURATION=$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$AUDIO")
+# Calculate total frames (Duration * 30 fps) to prevent zoompan from stopping
+TOTAL_FRAMES=$(echo "$DURATION * 30" | bc | cut -d'.' -f1)
 FADE_OUT=$(echo "$DURATION - 2" | bc -l)
 
-echo "🎬 Rendering Landscape (Balanced Shake): $FILENAME"
+echo "🎬 Rendering Landscape: $FILENAME"
+echo "⏱️ Total Frames for Animation: $TOTAL_FRAMES"
 
 # 4. RENDER ENGINE
 ffmpeg -y \
@@ -45,13 +46,13 @@ ffmpeg -y \
 [0:v]format=yuv420p,crop=min(iw\,ih):min(iw\,ih),scale=800:800,eq=saturation=1.2:contrast=1.05[fg];
 [0:v]format=yuv420p,scale=1920:1080:force_original_aspect_ratio=increase,
 crop=1920:1080,gblur=sigma=15,
-zoompan=z='1.03+0.02*sin(on*0.1)':d=1:s=1920x1080:fps=30,
-rotate='0.02*sin(t*1.5)':fillcolor=black@0[bg_shaky];
+zoompan=z='1.03+0.015*sin(on*0.1)':d=$TOTAL_FRAMES:s=1920x1080:fps=30,
+rotate='0.015*sin(t*1.2)':fillcolor=black@0[bg_shaky];
 [bg_shaky][fg]overlay=(W-w)/2:(H-h)/2[vbase];
-[2:v]scale=100:-1[logo_small];
+[2:v]scale=80:-1[logo_small];
 [logo_small]fade=t=in:st=$LOGO_START:d=0.5:alpha=1,
 fade=t=out:st=$LOGO_END:d=0.5:alpha=1[logofaded];
-[vbase][logofaded]overlay=40:40:enable='between(t,$LOGO_START,$LOGO_END)',format=yuv420p[v];
+[vbase][logofaded]overlay=30:30:enable='between(t,$LOGO_START,$LOGO_END)',format=yuv420p[v];
 [1:a]afade=t=in:st=0:d=1.5,afade=t=out:st=$FADE_OUT:d=2[a]
 " \
 -map "[v]" \
