@@ -1,62 +1,64 @@
 #!/bin/bash
 
-# --- 1. CONFIG & ASSETS ---
+# --- CONFIG ---
 AUDIO="./assets/audio/audio.mp3"
 IMAGE="./assets/image/image.jpg"
 LOGO="./assets/spotify.png"
 METADATA="metadata.json"
 OUT_DIR="./output"
-TEMP_LOOP="./temp_motion.mp4"
 
 mkdir -p "$OUT_DIR"
 
-# --- 2. READ METADATA & SANITIZE ---
-if [ -f "$METADATA" ] && command -v jq >/dev/null 2>&1; then
-    ARTIST=$(jq -r '.artist // "Artist"' "$METADATA" | sed 's/[^a-zA-Z0-9 ]//g' | tr ' ' '_')
-    TRACK=$(jq -r '.track // "Track"' "$METADATA" | sed 's/[^a-zA-Z0-9 ]//g' | tr ' ' '_')
+# --- CLEAN OUTPUT FOLDER ---
+rm -rf "$OUT_DIR"/*
+git add -A
+
+# 1. READ METADATA
+if [ -f "$METADATA" ]; then
+    ARTIST=$(jq -r '.artist // "Artist"' "$METADATA" | tr ' ' '_')
+    TRACK=$(jq -r '.track // "Track"' "$METADATA" | tr ' ' '_')
     FILENAME="${ARTIST}_-_${TRACK}.mp4"
 else
-    FILENAME="reel_$(date +%s).mp4"
+    FILENAME="output.mp4"
 fi
+
 FINAL_OUT="$OUT_DIR/$FILENAME"
 
-# --- 3. CALCULATE TIMINGS ---
-if [ ! -f "$AUDIO" ]; then echo "❌ Missing audio: $AUDIO"; exit 1; fi
+# 2. VERIFY ASSETS
+if [ ! -f "$AUDIO" ]; then echo "❌ Missing audio"; exit 1; fi
+
+# 3. TIMING CALCULATIONS
+# Logo: starts at 5s, stays for 5s (ends at 10s)
+LOGO_START=5
+LOGO_END=10
 DURATION=$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$AUDIO")
-FADE_OUT_START=$(echo "$DURATION - 2" | bc -l)
+FADE_OUT=$(echo "$DURATION - 2" | bc -l)
 
-# --- 4. STEP ONE: FAST MOTION LOOP (10 Seconds) ---
-# We render the heavy effects at a smaller scale to save CPU cycles.
-echo "🚀 Phase 1: Generating High-Speed Motion Loop..."
-ffmpeg -y -loop 1 -t 10 -i "$IMAGE" \
--filter_complex \
-"[0:v]scale=960:540:force_original_aspect_ratio=increase,crop=960:540[small];
- [small]zoompan=z='1.03+0.01*sin(on*0.3)':d=300:s=960x540:fps=30,boxblur=10:5[v]" \
--c:v libx264 -preset ultrafast -pix_fmt yuv420p "$TEMP_LOOP"
+echo "🎬 Rendering Landscape with Shake: $FILENAME"
 
-# --- 5. STEP TWO: FINAL ASSEMBLY ---
-# We loop the 10s clip and overlay the high-res cover and logo.
-echo "🎬 Phase 2: Assembling Final Reel ($FILENAME)..."
+# 4. RENDER ENGINE
 ffmpeg -y \
--stream_loop -1 -t "$DURATION" -i "$TEMP_LOOP" \
--i "$AUDIO" \
--loop 1 -t "$DURATION" -i "$IMAGE" \
--loop 1 -t "$DURATION" -i "$LOGO" \
+-t "$DURATION" -loop 1 -i "$IMAGE" \
+-t "$DURATION" -i "$AUDIO" \
+-t "$DURATION" -loop 1 -i "$LOGO" \
 -filter_complex "
-[0:v]scale=1920:1080,rotate='0.04*sin(2*PI*n/150)':fillcolor=black@0[bg];
-[2:v]scale=600:600:force_original_aspect_ratio=increase,crop=600:600,eq=saturation=1.2:contrast=1.05[fg];
-[bg][fg]overlay=(W-w)/2:(H-h)/2[vbase];
-[3:v]scale=150:-1,format=yuva420p,fade=t=in:st=5:d=1:alpha=1,fade=t=out:st=9:d=1:alpha=1[logo_f];
-[vbase][logo_f]overlay=60:60:enable='between(t,5,10)'[v_fading];
-[v_fading]fade=t=in:st=0:d=1,fade=t=out:st=$FADE_OUT_START:d=2[v];
-[1:a]afade=t=in:st=0:d=1,afade=t=out:st=$FADE_OUT_START:d=2[a]
+[0:v]format=yuv420p,crop=min(iw\,ih):min(iw\,ih),scale=800:800,eq=saturation=1.2:contrast=1.05[fg];
+[0:v]format=yuv420p,scale=1920:1080:force_original_aspect_ratio=increase,
+crop=1920:1080,gblur=sigma=15,
+zoompan=z='1.05+0.03*sin(on*0.5)':d=1:s=1920x1080:fps=30,
+rotate='0.05*sin(2*PI*t/0.5)':fillcolor=black@0[bg_shaky];
+[bg_shaky][fg]overlay=(W-w)/2:(H-h)/2[vbase];
+[2:v]scale=100:-1[logo_small];
+[logo_small]fade=t=in:st=$LOGO_START:d=0.5:alpha=1,
+fade=t=out:st=$LOGO_END:d=0.5:alpha=1[logofaded];
+[vbase][logofaded]overlay=40:40:enable='between(t,$LOGO_START,$LOGO_END+1)',format=yuv420p[v];
+[1:a]afade=t=in:st=0:d=1.5,afade=t=out:st=$FADE_OUT:d=2[a]
 " \
--map "[v]" -map "[a]" \
--c:v libx264 -preset superfast -crf 23 -pix_fmt yuv420p \
--c:a aac -b:a 160k -shortest \
+-map "[v]" \
+-map "[a]" \
+-c:v libx264 -preset veryfast -crf 22 \
+-pix_fmt yuv420p \
+-c:a aac -b:a 192k \
 "$FINAL_OUT"
 
-# --- 6. CLEANUP & GIT ---
-rm "$TEMP_LOOP"
-echo "✅ Process Complete: $FINAL_OUT"
-git add "$FINAL_OUT"
+echo "✅ Success: $FINAL_OUT"
