@@ -7,7 +7,7 @@ import re
 # --- CONFIGURATION (Environment Variables) ---
 NOTION_DB_ID = os.environ.get('NOTION_DB_ID')
 NOTION_PAGE_ID = os.environ.get('NOTION_PAGE_ID')
-PLAYLIST_ID = os.environ.get('PLAYLIST_ID')
+YT_PLAYLIST_ID = os.environ.get('YT_PLAYLIST_ID')
 NOTION_TOKEN = os.environ.get('NOTION_TOKEN')
 
 def clean_name(text):
@@ -81,8 +81,8 @@ def check_notion_entry(video_id):
         return False
 
 def main():
-    if not PLAYLIST_ID:
-        print("❌ Error: PLAYLIST_ID secret is missing.")
+    if not YT_PLAYLIST_ID:
+        print("❌ Error: YT_PLAYLIST_ID secret is missing.")
         sys.exit(1)
 
     token = get_yt_token()
@@ -93,7 +93,7 @@ def main():
     url = "https://www.googleapis.com/youtube/v3/playlistItems"
     params = {
         "part": "snippet,contentDetails", 
-        "playlistId": PLAYLIST_ID, 
+        "playlistId": YT_PLAYLIST_ID, 
         "maxResults": 2 
     }
     r = requests.get(url, params=params, headers={"Authorization": f"Bearer {token}"}).json()
