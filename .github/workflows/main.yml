@@ -44,7 +44,7 @@ jobs:
           # NEW Secrets
           NOTION_DB_ID: ${{ secrets.NOTION_DB_ID }}
           NOTION_PAGE_ID: ${{ secrets.NOTION_PAGE_ID }}
-          PLAYLIST_ID: ${{ secrets.PLAYLIST_ID }}
+          YT_PLAYLIST_ID: ${{ secrets.YT_PLAYLIST_ID }}
         run: python 1_Notion_check.py
           
 
