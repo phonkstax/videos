@@ -66,7 +66,7 @@ def check_notion_entry(video_id):
         "filter": {
             "and": [
                 {"property": "Video ID", "rich_text": {"equals": video_id.strip()}},
-                {"property": "Type", "select": {"equals": "Reel"}},
+                {"property": "Type", "select": {"equals": "Video"}},
                 {"property": "Channel", "relation": {"contains": NOTION_PAGE_ID}}
             ]
         }
