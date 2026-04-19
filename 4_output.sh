@@ -7,22 +7,23 @@ LOGO="./assets/spotify.png"
 METADATA="metadata.json"
 OUT_DIR="./output"
 
+# Ensure output directory exists
 mkdir -p "$OUT_DIR"
 
-# --- CLEAN OUTPUT FOLDER ---
-# 1. Remove all existing files in the output directory
-rm -rf ./output/*
+# --- 2. CLEAN & SYNC ---
+# Clean local output files
+rm -f "$OUT_DIR"/*
 
-# 2. Re-create the folder (if it was deleted) and move/save the new video back
-# (Assuming your generation script puts the new file back in ./output/)
+# Note: 'git add -A' here tracks the deletions. 
+# If you run this before generating the new file, 
+# the repo will show the folder as empty in the next commit.
+git add "$OUT_DIR"
 
-# 3. Sync the local deletion to Git so the repo also stays clean
-git add -A
-
-# 2. READ METADATA FOR FILENAME
-if [ -f "$METADATA" ]; then
-    ARTIST=$(jq -r '.artist // "Artist"' "$METADATA" | tr ' ' '_')
-    TRACK=$(jq -r '.track // "Track"' "$METADATA" | tr ' ' '_')
+# --- 3. READ METADATA ---
+if [ -f "$METADATA" ] && command -v jq >/dev/null 2>&1; then
+    # Sanitize names: remove special characters, replace spaces with underscores
+    ARTIST=$(jq -r '.artist // "Artist"' "$METADATA" | sed 's/[^a-zA-Z0-9 ]//g' | tr ' ' '_')
+    TRACK=$(jq -r '.track // "Track"' "$METADATA" | sed 's/[^a-zA-Z0-9 ]//g' | tr ' ' '_')
     FILENAME="${ARTIST}_-_${TRACK}.mp4"
 else
     FILENAME="reel_$(date +%s).mp4"
@@ -30,22 +31,20 @@ fi
 
 FINAL_OUT="$OUT_DIR/$FILENAME"
 
-# 3. VERIFY ASSETS
-if [ ! -f "$AUDIO" ]; then echo "❌ Missing audio"; exit 1; fi
+# --- 4. VERIFY ASSETS ---
+if [ ! -f "$AUDIO" ]; then echo "❌ Missing audio: $AUDIO"; exit 1; fi
+if [ ! -f "$IMAGE" ]; then echo "❌ Missing image: $IMAGE"; exit 1; fi
 
-# 4. CALCULATE TIMINGS
+# --- 5. CALCULATE TIMINGS ---
+# Use 'bc' to handle decimals for the fade start
 DURATION=$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$AUDIO")
 FADE_OUT_START=$(echo "$DURATION - 2" | bc -l)
-
-# CRITICAL FIX for 1:50 freeze: Calculate total frames needed
-# zoompan defaults to 3300 frames (~1:50 @ 30fps). We must override 'd'
 TOTAL_FRAMES=$(echo "$DURATION * 30" | bc | cut -d. -f1)
 
-echo "🎬 Rendering Horizontal (16:9): $FILENAME"
-echo "⏱️ Total Frames for Movement: $TOTAL_FRAMES"
+echo "🎬 Rendering: $FILENAME"
+echo "⏱️ Duration: ${DURATION}s | Frames: $TOTAL_FRAMES"
 
-# 5. RENDER ENGINE
-# Added 'd=$TOTAL_FRAMES' to zoompan to prevent the 1:50 freeze
+# --- 6. RENDER ENGINE ---
 ffmpeg -y \
 -t "$DURATION" -loop 1 -i "$IMAGE" \
 -t "$DURATION" -i "$AUDIO" \
@@ -67,3 +66,5 @@ rotate='0.04*sin(2*PI*n/150)':fillcolor=black@0[bg];
 -c:v libx264 -preset veryfast -crf 22 -pix_fmt yuv420p \
 -c:a aac -b:a 192k \
 "$FINAL_OUT"
+
+echo "✅ Done: $FINAL_OUT"
