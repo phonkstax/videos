@@ -26,16 +26,13 @@ DURATION=$(ffprobe -v error -show_entries format=duration -of default=noprint_wr
 FADE_OUT_START=$(echo "$DURATION - 2" | bc -l)
 
 # --- 4. STEP ONE: FAST MOTION LOOP (10 Seconds) ---
-# We render the heavy effects at a smaller scale to save CPU cycles.
 echo "🚀 Phase 1: Generating High-Speed Motion Loop..."
 ffmpeg -y -loop 1 -t 10 -i "$IMAGE" \
 -filter_complex \
-"[0:v]scale=960:540:force_original_aspect_ratio=increase,crop=960:540[small];
- [small]zoompan=z='1.03+0.01*sin(on*0.3)':d=300:s=960x540:fps=30,boxblur=10:5[v]" \
+"scale=960:540:force_original_aspect_ratio=increase,crop=960:540,zoompan=z='1.03+0.01*sin(on*0.3)':d=300:s=960x540:fps=30,boxblur=10:5" \
 -c:v libx264 -preset ultrafast -pix_fmt yuv420p "$TEMP_LOOP"
 
 # --- 5. STEP TWO: FINAL ASSEMBLY ---
-# We loop the 10s clip and overlay the high-res cover and logo.
 echo "🎬 Phase 2: Assembling Final Reel ($FILENAME)..."
 ffmpeg -y \
 -stream_loop -1 -t "$DURATION" -i "$TEMP_LOOP" \
