@@ -43,17 +43,16 @@ ffmpeg -y \
 -t "$DURATION" -i "$AUDIO" \
 -t "$DURATION" -loop 1 -i "$LOGO" \
 -filter_complex "
-# --- FRONT COVER
+# --- COVER (front image)
 [0:v]format=yuv420p,
 crop=min(iw\,ih):min(iw\,ih),
 scale=800:800[cover];
 
-# --- BACKGROUND (blur + motion + shake)
+# --- BACKGROUND (blur + smooth shake, stable)
 [0:v]format=yuv420p,
 crop=min(iw\,ih):min(iw\,ih),
 scale=1920:1080:force_original_aspect_ratio=increase,
 gblur=sigma=20,
-zoompan=z='1.02+0.01*sin(2*PI*t/8)':d=1:s=1920x1080:fps=30,
 rotate='0.02*sin(2*PI*t/6)':fillcolor=black@0,
 crop=1920:1080,
 fade=t=in:st=0:d=1,
