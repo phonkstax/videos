@@ -1,47 +1,74 @@
 #!/bin/bash
 
-# --- 1. CONFIG & ASSETS ---
+# --- CONFIG ---
 AUDIO="./assets/audio/audio.mp3"
 IMAGE="./assets/image/image.jpg"
 LOGO="./assets/spotify.png"
 METADATA="metadata.json"
 OUT_DIR="./output"
-TEMP_LOOP="temp_motion.mp4"
 
 mkdir -p "$OUT_DIR"
 
-# --- 2. READ METADATA & SANITIZE ---
-if [ -f "$METADATA" ] && command -v jq >/dev/null 2>&1; then
-    ARTIST=$(jq -r '.artist // "Artist"' "$METADATA" | sed 's/[^a-zA-Z0-9 ]//g' | tr ' ' '_')
-    TRACK=$(jq -r '.track // "Track"' "$METADATA" | sed 's/[^a-zA-Z0-9 ]//g' | tr ' ' '_')
+rm -rf ./output/*
+git add -A
+
+
+# 1. READ METADATA
+# We use jq to extract the artist and track, then replace spaces with underscores for a clean filename
+if [ -f "$METADATA" ]; then
+    ARTIST=$(jq -r '.artist // "Artist"' "$METADATA" | tr ' ' '_')
+    TRACK=$(jq -r '.track // "Track"' "$METADATA" | tr ' ' '_')
     FILENAME="${ARTIST}_-_${TRACK}.mp4"
 else
-    FILENAME="reel_$(date +%s).mp4"
+    FILENAME="output.mp4"
 fi
+
 FINAL_OUT="$OUT_DIR/$FILENAME"
 
-# --- 3. CALCULATE TIMINGS ---
-if [ ! -f "$AUDIO" ]; then echo "❌ Missing audio: $AUDIO"; exit 1; fi
+# 2. VERIFY ASSETS
+if [ ! -f "$AUDIO" ]; then echo "❌ Missing audio"; exit 1; fi
+
+# 3. AUTO-CALCULATE TIMINGS
 DURATION=$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$AUDIO")
-FADE_OUT_START=$(echo "$DURATION - 2" | bc -l)
+LOGO_START=$(echo "$DURATION / 2" | bc -l)
+FADE_OUT=$(echo "$DURATION - 2" | bc -l)
 
-# --- 4. PHASE 1: PRE-RENDER 10S MOTION LOOP ---
-# We render at 720p (1280x720) because it's blurred—this saves 50% CPU time.
-echo "⚡ Phase 1: Generating 10s Motion Loop (720p Optimized)..."
-ffmpeg -y -loop 1 -t 10 -i "$IMAGE" \
--filter_complex "scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720,zoompan=z='1.03+0.01*sin(on*0.3)':d=300:s=1280x720:fps=30,boxblur=10:5" \
--c:v libx264 -preset ultrafast -crf 20 -pix_fmt yuv420p "$TEMP_LOOP"
+echo "🎬 Rendering: $FILENAME"
+echo "⏱️ Duration: $DURATION | Logo at: $LOGO_START"
 
-# --- 5. PHASE 2: FINAL ASSEMBLY ---
-# We stream_loop the motion background and overlay high-res foreground assets.
-echo "🎬 Phase 2: Assembling Final Reel ($FILENAME)..."
+# 4. RENDER ENGINE
 ffmpeg -y \
--stream_loop -1 -t "$DURATION" -i "$TEMP_LOOP" \
--i "$AUDIO" \
--loop 1 -t "$DURATION" -i "$IMAGE" \
--loop 1 -t "$DURATION" -i "$LOGO" \
+-t "$DURATION" -loop 1 -i "$IMAGE" \
+-t "$DURATION" -i "$AUDIO" \
+-t "$DURATION" -loop 1 -i "$LOGO" \
 -filter_complex "
-[0:v]scale=1920:1080,rotate='0.04*sin(2*PI*n/150)':fillcolor=black@0[bg];
-[2:v]scale=600:600:force_original_aspect_ratio=increase,crop=600:600,eq=saturation=1.2:contrast=1.05[fg];
-[bg][fg]overlay=(W-w)/2:(H-h)/2[vbase];
-[3:v]scale=150:-1,format=yuva420p,fade=t=in:st=5:d=1:alpha=1,fade=t=out:st=9:d=1:
+[0:v]format=yuv420p,
+crop=min(iw\,ih):min(iw\,ih),
+scale=1920:1080:force_original_aspect_ratio=increase,
+crop=1920:1080,
+eq=saturation=1.2:contrast=1.05,
+fade=t=in:st=0:d=1,
+fade=t=out:st=($DURATION-1):d=1[base];
+
+[2:v]scale=200:-1,
+fade=t=in:st=5:d=1:alpha=1,
+fade=t=out:st=10:d=1:alpha=1[logo];
+
+[base][logo]overlay=20:20:enable='between(t,5,10)'[v];
+
+[1:a]afade=t=in:st=0:d=1.5,
+afade=t=out:st=($DURATION-1.5):d=1.5[a]
+" \
+-map "[v]" \
+-map "[a]" \
+-c:v libx264 -preset veryfast -crf 22 \
+-pix_fmt yuv420p \
+-c:a aac -b:a 192k \
+"$FINAL_OUT"
+echo "✅ Success: $FINAL_OUT"
+
+# ... (FFmpeg command finishes above) ...
+
+
+
+# Check if the secret variable is actually set
