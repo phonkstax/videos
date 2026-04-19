@@ -21,11 +21,9 @@ FINAL_OUT="$OUT_DIR/$FILENAME"
 
 # 2. TIMING
 DURATION=$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$AUDIO")
-# Calculate fade out timing
 VIDEO_FADE_ST=$(echo "$DURATION - 2" | bc -l)
-AUDIO_FADE_ST=$(echo "$DURATION - 2" | bc -l)
 
-echo "⚡ Rendering with Global Fades & Scratches: $FILENAME"
+echo "⚡ Rendering with Light Scratches: $FILENAME"
 
 # 3. RENDER ENGINE
 ffmpeg -y -hide_banner \
@@ -37,13 +35,13 @@ ffmpeg -y -hide_banner \
 [0:v]scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,boxblur=15[bg];
 [0:v]scale=800:800:force_original_aspect_ratio=increase,crop=800:800[fg];
 [bg][fg]overlay=(W-w)/2:(H-h)/2[vbase];
-[3:v]scale=1920:1080,format=yuv420p,colorchannelmixer=aa=0.3[scr];
+[3:v]scale=1920:1080,format=yuva420p,colorchannelmixer=aa=0.15[scr];
 [vbase][scr]overlay=0:0:shortest=1[v_scratched];
 [2:v]scale=120:-1[logo_s];
 [logo_s]fade=t=in:st=5:d=0.5:alpha=1,fade=t=out:st=10:d=0.5:alpha=1[logo_f];
 [v_scratched][logo_f]overlay=60:60:enable='between(t,5,11)'[v_with_logo];
 [v_with_logo]fade=t=in:st=0:d=1.5,fade=t=out:st=$VIDEO_FADE_ST:d=1.5[v];
-[1:a]afade=t=in:st=0:d=1.5,afade=t=out:st=$AUDIO_FADE_ST:d=2[a]
+[1:a]afade=t=in:st=0:d=1.5,afade=t=out:st=$VIDEO_FADE_ST:d=2[a]
 " \
 -map "[v]" -map "[a]" \
 -c:v libx264 -preset ultrafast -crf 26 -threads 0 \
@@ -51,4 +49,4 @@ ffmpeg -y -hide_banner \
 -t "$DURATION" \
 "$FINAL_OUT"
 
-echo "✅ Video Complete: $FINAL_OUT"
+echo "✅ Success! Scratches are now subtle."
